@@ -1,8 +1,3 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleContexts #-}
-
 module MyGIS.Data.Dimension (
     Dimension (..)
   , DimensionIx (..)
@@ -20,7 +15,7 @@ import           Data.Maybe (catMaybes)
 import           System.Cron (CronSchedule)
 
 newtype Horizon = Minutes {minutes :: Int}
-    deriving (Eq, Ord, Show, Enum, Num, Integral, Real)
+  deriving (Eq, Ord, Show)
 
 type Horizons = [Horizon]
 
@@ -32,17 +27,16 @@ mkHorizons :: Integral a => [a] -> Maybe Horizons
 mkHorizons hs = if length result == length hs
                 then Just . sort . nub $ result
                 else Nothing
-    where result = catMaybes . map mkHorizon $ hs
+  where result = catMaybes . map mkHorizon $ hs
 
 data Dimension = TimeDim CronSchedule
                | ForecastTimeDim CronSchedule
                | HorizonDim Horizons
-    deriving (Eq, Show)
+  deriving (Eq, Show)
 
-data DimensionIx where {
-    TimeIx   ::  UTCTime -> DimensionIx
-  ; FcTimeIx :: (UTCTime, Horizon) -> DimensionIx
-} deriving (Eq, Show)
+data DimensionIx = TimeIx UTCTime
+                 | FcTimeIx (UTCTime, Horizon)
+  deriving (Eq, Show)
 
 
 extractTime :: DimensionIx -> UTCTime
