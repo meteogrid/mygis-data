@@ -1,31 +1,33 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module MyGIS.Data.Source (
-    Source (Source),
-    IsSource (..),
-    RasterSource (RasterSource)
+    Source (Source)
+  , IsSource (..)
+  , RasterSource (RasterSource)
 ) where
 
 
-import           Data.Text (Text)
-import           MyGIS.Data.Context (Context)
 import           MyGIS.Data.Dimension (DimensionIx)
+import           MyGIS.Data.Store (IsStore)
 
-data RasterSource = RasterSource {
-    rsName    :: Text
-  , rsContext :: Context
+data Source st s where
+    Source :: IsSource st s => s -> Source st s
+
+
+class IsSource st s | st -> s where
+    store :: IsStore st => s -> st
+    dimIx :: s -> DimensionIx
+
+
+data RasterSource st = RasterSource {
+    rsStore   :: st
   , rsDimIx   :: DimensionIx
 } deriving (Eq, Show)
 
-class IsSource source where
-    name    :: source -> Text
-    context :: source -> Context
-    dimIx   :: source -> DimensionIx
 
-instance IsSource RasterSource where
-    name    = rsName
-    context = rsContext
+instance IsSource st (RasterSource st) where
+    store    = rsStore
     dimIx   = rsDimIx
-
-data Source where
-    Source :: IsSource s => s -> Source

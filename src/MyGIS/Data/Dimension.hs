@@ -3,15 +3,15 @@ module MyGIS.Data.Dimension (
   , DimensionIx (..)
   , mkHorizon
   , mkHorizons
+  , mkTime
   , extractTime
   , secondsToNominalDiffTime
 ) where
 
-import           Prelude hiding (min)
-import           Data.List (nub, sort)
+import           Data.List (nub, sort, intersperse)
 import           Data.Time.Clock
 import           Data.Time.Calendar
-import           Data.Maybe (catMaybes)
+import           Data.Either (partitionEithers)
 import           System.Cron (CronSchedule)
 
 newtype Horizon = Minutes {minutes :: Int}
@@ -19,32 +19,46 @@ newtype Horizon = Minutes {minutes :: Int}
 
 type Horizons = [Horizon]
 
-mkHorizon :: Integral a => a -> Maybe Horizon
-mkHorizon m | m >= 0     = Just . Minutes . fromIntegral $ m
-            | otherwise  = Nothing
+type Error = String
 
-mkHorizons :: Integral a => [a] -> Maybe Horizons
-mkHorizons hs = if length result == length hs
-                then Just . sort . nub $ result
-                else Nothing
-  where result = catMaybes . map mkHorizon $ hs
+mkHorizon :: Integral a => a -> Either Error Horizon
+mkHorizon m | m >= 0     = Right . Minutes . fromIntegral $ m
+            | otherwise  = Left "mkHorizon: Cannot be negative"
 
-data Dimension = TimeDim CronSchedule
-               | ForecastTimeDim CronSchedule
-               | HorizonDim Horizons
+mkHorizons :: Integral a => [a] -> Either Error Horizons
+mkHorizons [] = Left "mkHorizons: Empty list"
+mkHorizons hs = if errors /= []
+                then Right . sort . nub $ result
+                else Left . concat . intersperse "; " $ errors
+  where (errors,result) = partitionEithers . map mkHorizon $ hs
+
+data Dimension = NoDimension
+               | TimeDimension
+  deriving (Eq, Show)
+    
+data TimeDimension = ObservedTime CronSchedule
+                   | ForecastedTime CronSchedule Horizons
   deriving (Eq, Show)
 
-data DimensionIx = TimeIx UTCTime
-                 | FcTimeIx (UTCTime, Horizon)
+data DimensionIx = NoDimensionIx
+                 | TimeDimensionIx
   deriving (Eq, Show)
 
+newtype Time = Time {getTime :: UTCTime} deriving (Eq, Ord, Show)
 
-extractTime :: DimensionIx -> UTCTime
-extractTime (TimeIx   t)        = t
-extractTime (FcTimeIx (fct, h)) = addHorizonToTime h fct
+mkTime :: UTCTime -> Time
+mkTime = Time
 
-addHorizonToTime :: Horizon -> UTCTime -> UTCTime
-addHorizonToTime h t = addUTCTime (horizonToNominalDiffTime h) t
+data TimeDimensionIx = ObservedTimeIx Time
+                     | ForecastedTimeIx Time Horizon
+
+extractTime :: TimeDimensionIx -> Time
+extractTime (ObservedTimeIx   t)        = t
+extractTime (ForecastedTimeIx t h) = addHorizonToTime t h
+
+addHorizonToTime :: Time -> Horizon -> Time
+addHorizonToTime t h
+    = Time $ addUTCTime (horizonToNominalDiffTime h) (getTime t)
 
 horizonToNominalDiffTime :: Horizon -> NominalDiffTime
 horizonToNominalDiffTime = minutesToNominalDiffTime . fromIntegral . minutes
