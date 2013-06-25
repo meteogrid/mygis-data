@@ -8,6 +8,6 @@ module MyGIS.Data (
 
 import MyGIS.Data.Context
 import MyGIS.Data.Dimension
-import MyGIS.Data.Source hiding (IsSource)
-import MyGIS.Data.Store hiding (IsStore)
+import MyGIS.Data.Source
+import MyGIS.Data.Store
 import MyGIS.Data.SpatialReference

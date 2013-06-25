@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module MyGIS.Data.Store (
     IsStore (..)
@@ -6,32 +8,37 @@ module MyGIS.Data.Store (
 
   , type_
   , context
+  , dimension
 ) where
 
 import           Data.Text (Text)
 import           MyGIS.Data.Context (Context)
+import           MyGIS.Data.Dimension (Dimension)
 
 
 
-data Store = Store {
-    type_   :: Text
- ,  context :: Context
+data Store d = Store {
+    type_     :: Text
+ ,  context   :: Context
+ ,  dimension :: d
 } deriving (Eq, Show)
 
-class IsStore st where
-    toStore :: st -> Store
+class Dimension d ix => IsStore st d ix where
+    toStore :: st -> Store d
 
-instance IsStore Store where
+instance Dimension d ix => IsStore (Store d) d ix where
     toStore = id 
 
-data RasterStore = RasterStore {
+data RasterStore d = RasterStore {
     rsType    :: Text
   , rsContext :: Context
+  , rsDim     :: d
 } deriving (Eq, Show)
 
 
-instance IsStore RasterStore where
+instance Dimension d ix => IsStore (RasterStore d) d ix where
     toStore rs = Store {
-        type_   = rsType rs
-      , context = rsContext rs
+        type_      = rsType rs
+      , context    = rsContext rs
+      , dimension  = rsDim rs
       }
