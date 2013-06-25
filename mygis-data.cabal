@@ -1,0 +1,41 @@
+name:                mygis-data
+-- The package version.  See the Haskell package versioning policy (PVP) 
+-- for standards guiding when and how versions should be incremented.
+-- http://www.haskell.org/haskellwiki/Package_versioning_policy
+-- PVP summary:      +-+------- breaking API changes
+--                   | | +----- non-breaking API additions
+--                   | | | +--- code changes with no API change
+version:             0.1.0.0
+synopsis:            Core data types and functions used by the mygis library
+description:         TODO
+license:             BSD3
+license-file:        LICENSE
+author:              Meteogrid
+maintainer:          alberto@meteogrid.com
+category:            Data
+build-type:          Simple
+cabal-version:       >=1.8
+
+
+library
+  hs-source-dirs:
+    src
+
+  exposed-modules:     
+    MyGIS.Data,
+    MyGIS.Data.Source,
+    MyGIS.Data.Context,
+    MyGIS.Data.Dimension,
+    MyGIS.Data.SpatialReference
+  
+  -- Modules included in this library but not exported.
+  -- other-modules:       
+  
+  -- Other library packages from which modules are imported.
+  build-depends:
+    base                      >= 4         && < 5,
+    text                      >= 0.11.3.1  && < 0.12,
+    time                      >= 1.4       && < 1.5,
+    cron                      >=0.1.1      && < 0.2
+
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -fllvm -O2
