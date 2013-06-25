@@ -14,6 +14,7 @@ import           Data.Time.Calendar
 import           Data.Either (partitionEithers)
 import           System.Cron (CronSchedule)
 
+
 newtype Horizon = Minutes {minutes :: Int}
   deriving (Eq, Ord, Show)
 
@@ -27,7 +28,7 @@ mkHorizon m | m >= 0     = Right . Minutes . fromIntegral $ m
 
 mkHorizons :: Integral a => [a] -> Either Error Horizons
 mkHorizons [] = Left "mkHorizons: Empty list"
-mkHorizons hs = if errors /= []
+mkHorizons hs = if null errors
                 then Right . sort . nub $ result
                 else Left . concat . intersperse "; " $ errors
   where (errors,result) = partitionEithers . map mkHorizon $ hs

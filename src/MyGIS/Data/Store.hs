@@ -1,9 +1,11 @@
-{-# LANGUAGE GADTs #-}
 
 module MyGIS.Data.Store (
     IsStore (..)
   , Store (Store)
   , RasterStore (RasterStore)
+
+  , type_
+  , context
 ) where
 
 import           Data.Text (Text)
@@ -11,13 +13,16 @@ import           MyGIS.Data.Context (Context)
 
 
 
-data Store where
-    Store :: IsStore st => st -> Store
-
+data Store = Store {
+    type_   :: Text
+ ,  context :: Context
+} deriving (Eq, Show)
 
 class IsStore st where
-    type_   :: st -> Text
-    context :: st -> Context
+    toStore :: st -> Store
+
+instance IsStore Store where
+    toStore = id 
 
 data RasterStore = RasterStore {
     rsType    :: Text
@@ -26,5 +31,7 @@ data RasterStore = RasterStore {
 
 
 instance IsStore RasterStore where
-    type_   = rsType
-    context = rsContext
+    toStore rs = Store {
+        type_   = rsType rs
+      , context = rsContext rs
+      }
