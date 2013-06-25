@@ -40,7 +40,7 @@ data DimensionIx = TimeIx UTCTime
 
 
 extractTime :: DimensionIx -> UTCTime
-extractTime (TimeIx t) = t
+extractTime (TimeIx   t)        = t
 extractTime (FcTimeIx (fct, h)) = addHorizonToTime h fct
 
 addHorizonToTime :: Horizon -> UTCTime -> UTCTime

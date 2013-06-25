@@ -4,6 +4,8 @@ module MyGIS.Data.Context (
     Context (..)
   , Box (..)
   , Shape (..)
+  , forward
+  , backward
 ) where
 
 import           Data.Text (Text)
@@ -31,6 +33,11 @@ data Shape = Shape {
 } deriving (Eq, Show)
 
 
+forward :: Context -> Point -> Pixel
+forward ctx = point2pixel (geotransform ctx)
+
+backward :: Context -> Pixel -> Point
+backward ctx = pixel2point (geotransform ctx)
 
 -- Tipo para la matriz de transformacion
 data GeoTransform = GeoTransform !Double !Double !Double !Double !Double !Double
@@ -38,36 +45,38 @@ data GeoTransform = GeoTransform !Double !Double !Double !Double !Double !Double
 
 -- definimos la altura y ancho de una caja
 width, height :: Box -> Double
-width  (Box x0  _ x1  _) = x1 - x0
-height (Box  _ y0  _ y1) = y1 - y0
+width  b = (x1 b) - (x0 b)
+height b = (y1 b) - (y0 b)
 
 -- para construir una matriz de transformacion a partir de
 -- un bbox y forma del raster
 mkGeoTransform :: Box -> Shape -> GeoTransform
-mkGeoTransform b@(Box x0 _ _ y1) (Shape nx ny) =
-    GeoTransform x0 dx 0 y1 0 (-dy)
-    where dx = width b / fromIntegral nx
-          dy = height b / fromIntegral ny
+mkGeoTransform b s =
+    GeoTransform (x0 b) dx 0 (y1 b) 0 (-dy)
+    where dx = width b / fromIntegral (nx s)
+          dy = height b / fromIntegral (ny s)
 
 geotransform :: Context -> GeoTransform
 geotransform c = mkGeoTransform (box c) (shape c)
 
-type Pixel = (Int, Int)
-type Point = (Double, Double)
+newtype Pixel = Pixel (Int, Int) deriving (Eq, Show)
+newtype Point = Point (Double, Double) deriving (Eq, Show)
 
 pixel2point :: GeoTransform -> Pixel -> Point
-pixel2point (GeoTransform gt0 gt1 gt2 gt3 gt4 gt5) (ln,col) = (px,py)
-    where px   = gt0 + col'*gt1 + ln'*gt2
-          py   = gt3 + col'*gt4 + ln'*gt5
-          col' = fromIntegral col
-          ln'  = fromIntegral ln
+pixel2point (GeoTransform gt0 gt1 gt2 gt3 gt4 gt5) (Pixel (ln, col))
+    = Point (x, y)
+  where x    = gt0 + col'*gt1 + ln'*gt2
+        y    = gt3 + col'*gt4 + ln'*gt5
+        col' = fromIntegral col
+        ln'  = fromIntegral ln
     
 point2pixel :: GeoTransform -> Point -> Pixel
-point2pixel (GeoTransform gt0 gt1 gt2 gt3 gt4 gt5) (x,y) = (floor ln, floor col)
-    where ln     = detA1B  / detA
-          col    = detA2B  / detA
-          detA   = gt1*gt5 - gt2*gt4
-          x0     = x - gt0
-          y0     = y - gt3
-          detA1B = gt1*y0   + gt4*x0
-          detA2B = gt2*y0   + gt5*x0
+point2pixel (GeoTransform gt0 gt1 gt2 gt3 gt4 gt5) (Point (x, y))
+    = Pixel (floor ln, floor col)
+  where ln     = detA1B  / detA
+        col    = detA2B  / detA
+        detA   = gt1*gt5 - gt2*gt4
+        detA1B = gt1*y'   + gt4*x'
+        detA2B = gt2*y'   + gt5*x'
+        x'     = x - gt0
+        y'     = y - gt3
