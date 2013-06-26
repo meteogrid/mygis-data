@@ -1,5 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module MyGIS.Data.Store (
     IsStore (..)
@@ -13,7 +14,8 @@ module MyGIS.Data.Store (
 
 import           Data.Text (Text)
 import           MyGIS.Data.Context (Context)
-import           MyGIS.Data.Dimension (Dimension)
+import           MyGIS.Data.Dimension (Dimension, DimIx)
+import           MyGIS.Data.Source (RasterSource)
 
 
 
@@ -23,11 +25,11 @@ data Store d = Store {
  ,  dimension :: d
 } deriving (Eq, Show)
 
-class Dimension d ix => IsStore st d ix where
-    toStore :: st -> Store d
+class Dimension d => IsStore st d where
+    type Src st d :: *
+    toStore :: st d -> Store d
+    getSource :: st d -> DimIx d -> Src st d
 
-instance Dimension d ix => IsStore (Store d) d ix where
-    toStore = id 
 
 data RasterStore d = RasterStore {
     rsType    :: Text
@@ -36,9 +38,11 @@ data RasterStore d = RasterStore {
 } deriving (Eq, Show)
 
 
-instance Dimension d ix => IsStore (RasterStore d) d ix where
+instance Dimension d => IsStore RasterStore d where
+    type Src RasterStore d = RasterSource (DimIx d)
     toStore rs = Store {
         type_      = rsType rs
       , context    = rsContext rs
       , dimension  = rsDim rs
       }
+    getSource = undefined

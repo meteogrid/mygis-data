@@ -1,5 +1,6 @@
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module MyGIS.Data.Dimension (
     Dimension (..)
@@ -8,23 +9,28 @@ module MyGIS.Data.Dimension (
   , ObservationTimeIx (..) 
   , ForecastTimeIx (..) 
   , mkHorizon
+  , mkSchedule
   , mkHorizons
   , mkTime
 ) where
 
 import           Data.List (nub, sort, intersperse)
+import           Data.Text (Text)
 import           Data.Time.Clock
 import           Data.Time.Calendar
 import           Data.Either (partitionEithers)
 import           System.Cron (CronSchedule)
+import           System.Cron.Parser (cronSchedule)
+import           Data.Attoparsec.Text (parseOnly)
 
-class (Eq d, Show d, Eq ix, Show ix, Ord ix) => Dimension d ix | d->ix where
-    next         :: d -> ix -> ix
-    prev         :: d -> ix -> ix
-    roundUp      :: d -> ix -> ix
-    roundDown    :: d -> ix -> ix
-    listFrom     :: d -> ix -> [ix]
-    listFromTo   :: d -> ix -> [ix]
+class (Eq d, Show d) => Dimension d where
+    type DimIx d :: *
+    next         :: d -> DimIx d -> DimIx d
+    prev         :: d -> DimIx d -> DimIx d
+    roundUp      :: d -> DimIx d -> DimIx d
+    roundDown    :: d -> DimIx d -> DimIx d
+    listFrom     :: d -> DimIx d -> [DimIx d]
+    listFromTo   :: d -> DimIx d -> [DimIx d]
 
 
 data ObservationTimeDimension = ObservationTimeDimension CronSchedule
@@ -34,7 +40,8 @@ data ForecastTimeDimension = ForecastTimeDimension CronSchedule Horizons
   deriving (Eq, Show)
 
 
-instance Dimension ObservationTimeDimension ObservationTimeIx where
+instance Dimension ObservationTimeDimension  where
+    type DimIx ObservationTimeDimension = ObservationTimeIx
     next = undefined
     prev = undefined
     roundUp = undefined
@@ -42,7 +49,8 @@ instance Dimension ObservationTimeDimension ObservationTimeIx where
     listFrom = undefined
     listFromTo = undefined
 
-instance Dimension ForecastTimeDimension ForecastTimeIx where
+instance Dimension ForecastTimeDimension where
+    type DimIx ForecastTimeDimension = ForecastTimeIx
     next = undefined
     prev = undefined
     roundUp = undefined
@@ -100,3 +108,7 @@ mkHorizons hs = if null errors
                 then Right . sort . nub $ result
                 else Left . concat . intersperse "; " $ errors
   where (errors,result) = partitionEithers . map mkHorizon $ hs
+
+
+mkSchedule :: Text -> Either String CronSchedule
+mkSchedule = parseOnly cronSchedule
