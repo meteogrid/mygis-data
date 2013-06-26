@@ -9,5 +9,5 @@ module MyGIS.Data (
 import MyGIS.Data.Context
 import MyGIS.Data.Dimension
 import MyGIS.Data.Source
-import MyGIS.Data.Store
+import MyGIS.Data.Store hiding (AnyStore(..))
 import MyGIS.Data.SpatialReference
