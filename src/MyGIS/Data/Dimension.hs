@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module MyGIS.Data.Dimension (
     Dimension (..)
@@ -16,6 +17,7 @@ module MyGIS.Data.Dimension (
 
 import           Data.List (nub, sort, intersperse)
 import           Data.Text (Text)
+import           Data.Typeable
 import           Data.Time.Clock
 import           Data.Time.Calendar
 import           Data.Either (partitionEithers)
@@ -23,7 +25,7 @@ import           System.Cron (CronSchedule)
 import           System.Cron.Parser (cronSchedule)
 import           Data.Attoparsec.Text (parseOnly)
 
-class (Eq d, Show d) => Dimension d where
+class (Eq d, Show d, Typeable d) => Dimension d where
     type DimIx d :: *
     next         :: d -> DimIx d -> DimIx d
     prev         :: d -> DimIx d -> DimIx d
@@ -34,10 +36,10 @@ class (Eq d, Show d) => Dimension d where
 
 
 data ObservationTimeDimension = ObservationTimeDimension CronSchedule
-  deriving (Eq, Show)
+  deriving (Eq, Show, Typeable)
 
 data ForecastTimeDimension = ForecastTimeDimension CronSchedule Horizons
-  deriving (Eq, Show)
+  deriving (Eq, Show, Typeable)
 
 
 instance Dimension ObservationTimeDimension  where

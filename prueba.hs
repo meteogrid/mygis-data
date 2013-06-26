@@ -2,16 +2,18 @@
 
 import Data.Time.Clock
 import MyGIS.Data
-import System.Cron.Parser
-import Data.Attoparsec.Text (parseOnly)
 
 
 main = do
     let ctx      = Context "pen_horarias_500_utm30" (Box 0 0 10 10) (Shape 100 100) ""
-        st       = RasterStore "temperatura" ctx (ObservationTimeDimension vt)
-        Right vt = parseOnly cronSchedule "*/2 * 3 * 4,5,6"
+        rst      = RasterStore "temperatura" ctx (ObservationTimeDimension vt)
+        st       = Store rst
+        Right vt = mkSchedule "*/2 * 3 * 4,5,6"
     t <- getCurrentTime
-    let ix  = ObservationTimeIx  . mkTime $ t
-        src = RasterSource ix
+    let ix      = ObservationTimeIx  . mkTime $ t
+        Right h = mkHorizon 1
+        ix2     = ForecastTimeIx (mkTime t) h
+        (Just b)= fromStore st :: Maybe (RasterStore ObservationTimeDimension)
+        src     = getSource b ix
 
-    print (dimIx . toSource $ src)
+    print (dim rst)
