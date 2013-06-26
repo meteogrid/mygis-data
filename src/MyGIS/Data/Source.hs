@@ -10,19 +10,18 @@ module MyGIS.Data.Source (
 ) where
 
 
-class IsSource s ix where
-    toSource :: s -> Source ix
+class IsSource s ix u where
+    toSource :: s -> Source ix u
 
-data Source ix = Source {
+data Source ix u = Source {
    dimIx :: ix
+ , units :: u
 }  deriving (Eq, Show)
 
-instance IsSource (Source ix) ix where
-    toSource = id
-
-data RasterSource ix = RasterSource {
+data RasterSource ix u = RasterSource {
    rsDimIx   :: ix
+ , rsUnits   :: u
 }  deriving (Eq, Show)
 
-instance IsSource (RasterSource ix) ix where
-    toSource rs = Source (rsDimIx rs)
+instance IsSource (RasterSource ix u) ix u where
+    toSource rs = Source (rsDimIx rs) (rsUnits rs)

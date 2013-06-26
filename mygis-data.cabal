@@ -36,8 +36,9 @@ library
   build-depends:
     attoparsec                >= 0.10.4    && < 0.11,
     base                      >= 4         && < 5,
+    cron                      >= 0.1.1     && < 0.2,
+    dimensional-tf            >= 0.1.1     && < 0.2,
     text                      >= 0.11.3.1  && < 0.12,
-    time                      >= 1.4       && < 1.5,
-    cron                      >= 0.1.1     && < 0.2
+    time                      >= 1.4       && < 1.5
 
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -fllvm -O2

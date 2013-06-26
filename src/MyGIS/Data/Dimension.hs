@@ -29,8 +29,9 @@ class (Eq d, Show d, Typeable d) => Dimension d where
     type DimIx d :: *
     next         :: d -> DimIx d -> DimIx d
     prev         :: d -> DimIx d -> DimIx d
-    roundUp      :: d -> DimIx d -> DimIx d
-    roundDown    :: d -> DimIx d -> DimIx d
+    round        :: d -> DimIx d -> DimIx d
+    ceil         :: d -> DimIx d -> DimIx d
+    floor        :: d -> DimIx d -> DimIx d
     listFrom     :: d -> DimIx d -> [DimIx d]
     listFromTo   :: d -> DimIx d -> [DimIx d]
 
@@ -46,17 +47,19 @@ instance Dimension ObservationTimeDimension  where
     type DimIx ObservationTimeDimension = ObservationTimeIx
     next = undefined
     prev = undefined
-    roundUp = undefined
-    roundDown = undefined
-    listFrom = undefined
+    ceil       = undefined
+    floor      = undefined
+    round      = undefined
+    listFrom   = undefined
     listFromTo = undefined
 
 instance Dimension ForecastTimeDimension where
     type DimIx ForecastTimeDimension = ForecastTimeIx
     next = undefined
     prev = undefined
-    roundUp = undefined
-    roundDown = undefined
+    ceil = undefined
+    floor = undefined
+    round = undefined
     listFrom = undefined
     listFromTo = undefined
 
