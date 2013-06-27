@@ -26,7 +26,7 @@ import           Data.Attoparsec.Text (parseOnly)
 
 import           MyGIS.Data.Error (EitherError, mapE, mkError)
 
-class (Eq d, Show d, Typeable d) => Dimension d where
+class (Show d, Typeable d) => Dimension d where
     type DimIx d :: *
     next         :: d -> DimIx d -> DimIx d
     prev         :: d -> DimIx d -> DimIx d
@@ -38,11 +38,16 @@ class (Eq d, Show d, Typeable d) => Dimension d where
 
 
 data ObservationTimeDimension = ObservationTimeDimension CronSchedule
-  deriving (Eq, Show, Typeable)
+  deriving (Show, Typeable)
 
-data ForecastTimeDimension = ForecastTimeDimension CronSchedule Horizons
-  deriving (Eq, Show, Typeable)
+data ForecastTimeDimension = ForecastTimeDimension CronSchedule
+                           | ForecastTimeDimensionF CronSchedule (Time->Horizons)
+  deriving Typeable
 
+instance Show ForecastTimeDimension where
+  show (ForecastTimeDimension c) = "ForecastTimeDimension " ++ (show c)
+  show (ForecastTimeDimensionF c _)
+    = "ForecastTimeDimension " ++ (show c) ++ " <func>"
 
 instance Dimension ObservationTimeDimension  where
     type DimIx ObservationTimeDimension = ObservationTimeIx

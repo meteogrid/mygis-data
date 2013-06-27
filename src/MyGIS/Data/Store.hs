@@ -49,16 +49,18 @@ data RasterStore d u = RasterStore {
   , rsContext :: Context
   , rsDim     :: d
   , rsUnits   :: u
-} deriving (Eq, Show, Typeable)
+} deriving (Show, Typeable)
 
-class (Typeable u, Show u, Eq u) => IsUnit u where
+instance Eq (RasterStore d u) where
+    s == s' =
+      (rsType s) == (rsType s') && (rsContext s) == (rsContext s')
+
 
 type RealLength = Unit DLength Double
-instance IsUnit RealLength where
-
 instance Show RealLength where show _ = "RealLength"
 
-instance (IsUnit u, Dimension d) => IsStore RasterStore d u where
+instance (Typeable u, Show u, Eq u, Dimension d)
+  => IsStore RasterStore d u where
     type Src RasterStore d u = RasterSource (DimIx d) u
     toAnyStore rs            = AnyStore rs (rsType rs) (rsContext rs)
     getSource rs ix          = RasterSource ix (rsUnits rs)
