@@ -23,6 +23,8 @@ library
 
   exposed-modules:     
     MyGIS.Data,
+    MyGIS.Data.Type,
+    MyGIS.Data.Error,
     MyGIS.Data.Store,
     MyGIS.Data.Source,
     MyGIS.Data.Context,

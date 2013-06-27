@@ -14,14 +14,13 @@ module MyGIS.Data.Store (
   , sType
 ) where
 
-import           Data.Text (Text)
 import           Data.Typeable (Typeable, cast)
 import           Numeric.Units.Dimensional.TF (Unit, DLength)
 import           MyGIS.Data.Context (Context)
 import           MyGIS.Data.Dimension (Dimension, DimIx)
 import           MyGIS.Data.Source (RasterSource(RasterSource))
+import           MyGIS.Data.Type (Type)
 
-type Type = Text
 
 data AnyStore where
     AnyStore :: IsStore s d u => s d u -> Type -> Context -> AnyStore
@@ -46,7 +45,7 @@ class (Typeable u, Eq (st d u), Show (st d u), Dimension d, Typeable (st d u))  
     fromAnyStore (AnyStore s _ _) = cast s
 
 data RasterStore d u = RasterStore {
-    rsType    :: Text
+    rsType    :: Type
   , rsContext :: Context
   , rsDim     :: d
   , rsUnits   :: u

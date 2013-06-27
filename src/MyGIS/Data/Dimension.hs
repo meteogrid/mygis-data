@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module MyGIS.Data.Dimension (
     Dimension (..)
@@ -15,15 +16,16 @@ module MyGIS.Data.Dimension (
   , mkTime
 ) where
 
-import           Data.List (nub, sort, intersperse)
+import           Data.List (nub, sort)
 import           Data.Text (Text)
-import           Data.Typeable
+import           Data.Typeable (Typeable)
 import           Data.Time.Clock
 import           Data.Time.Calendar
-import           Data.Either (partitionEithers)
 import           System.Cron (CronSchedule)
 import           System.Cron.Parser (cronSchedule)
 import           Data.Attoparsec.Text (parseOnly)
+
+import           MyGIS.Data.Error (EitherError, mapE)
 
 class (Eq d, Show d, Typeable d) => Dimension d where
     type DimIx d :: *
@@ -101,18 +103,16 @@ newtype Horizon = Minutes {minutes :: Int}
 
 type Horizons = [Horizon]
 
-type Error = String
-
-mkHorizon :: Integral a => a -> Either Error Horizon
+mkHorizon :: Integral a => a -> EitherError Horizon
 mkHorizon m | m >= 0     = Right . Minutes . fromIntegral $ m
             | otherwise  = Left "mkHorizon: Cannot be negative"
 
-mkHorizons :: Integral a => [a] -> Either Error Horizons
+mkHorizons :: Integral a => [a] -> EitherError Horizons
 mkHorizons [] = Left "mkHorizons: Empty list"
-mkHorizons hs = if null errors
-                then Right . sort . nub $ result
-                else Left . concat . intersperse "; " $ errors
-  where (errors,result) = partitionEithers . map mkHorizon $ hs
+mkHorizons xs = let result = mapE mkHorizon "; " xs
+                in case result of
+                        Right hs -> Right . sort . nub $ hs
+                        e        -> e
 
 
 mkSchedule :: Text -> Either String CronSchedule
