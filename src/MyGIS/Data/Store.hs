@@ -34,6 +34,7 @@ deriving instance Typeable AnyStore
 class (Typeable u, Eq (st d u), Show (st d u), Dimension d, Typeable (st d u))  =>
   IsStore st d u where
     type Src st d u :: *
+
     fromAnyStore    :: AnyStore -> Maybe (st d u)
     toAnyStore      :: st d u -> AnyStore
     getSource       :: st d u -> DimIx d -> Src st d u

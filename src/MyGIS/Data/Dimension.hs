@@ -6,28 +6,21 @@
 
 module MyGIS.Data.Dimension (
     Dimension (..)
+  , DimensionIx (..)
+  , DimensionIxKey
   , ObservationTimeDimension (..) 
   , ForecastTimeDimension (..) 
   , ObservationTimeIx (..) 
   , ForecastTimeIx (..) 
-  , mkHorizon
-  , mkSchedule
-  , mkHorizons
-  , mkTime
 ) where
 
-import           Data.List (nub, sort)
-import           Data.Text (Text)
+import           Data.Text (Text, pack)
 import           Data.Typeable (Typeable)
-import           Data.Time.Clock
-import           Data.Time.Calendar
-import           System.Cron (CronSchedule)
-import           System.Cron.Parser (cronSchedule)
-import           Data.Attoparsec.Text (parseOnly)
 
-import           MyGIS.Data.Error (EitherError, mapE, mkError)
+import MyGIS.Data.Time (CronSchedule, Horizon, Time)
 
-class (Show d, Typeable d, Ord (DimIx d)) => Dimension d where
+
+class (Show d, Typeable d, DimensionIx (DimIx d)) => Dimension d where
     type DimIx d :: *
     nextIx         :: d -> DimIx d -> DimIx d
     prevIx         :: d -> DimIx d -> DimIx d
@@ -44,12 +37,14 @@ class (Show d, Typeable d, Ord (DimIx d)) => Dimension d where
               adv   = (if from < to then nextIx else prevIx) dim
               cond  = if from < to then (<=) else (>=)
 
-
 data ObservationTimeDimension = ObservationTimeDimension CronSchedule
   deriving (Show, Typeable)
 
-data ForecastTimeDimension = ForecastTimeDimension CronSchedule
-                           | ForecastTimeDimensionF CronSchedule (Time->Horizons)
+
+
+data ForecastTimeDimension =
+    ForecastTimeDimension CronSchedule
+  | ForecastTimeDimensionF CronSchedule (Time->[Horizon])
   deriving Typeable
 
 instance Show ForecastTimeDimension where
@@ -74,59 +69,21 @@ instance Dimension ForecastTimeDimension where
     roundIx      = undefined
  
 
+type DimensionIxKey = [Text]
+
+class (Show ix, Typeable ix, Ord ix, Eq ix) => DimensionIx ix where
+    ixKey          :: ix -> DimensionIxKey
+
+
+
 data ObservationTimeIx = ObservationTimeIx Time
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Typeable)
+
+instance DimensionIx ObservationTimeIx where
+    ixKey (ObservationTimeIx t) = map pack [show t]
 
 data ForecastTimeIx = ForecastTimeIx Time Horizon
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Typeable)
 
-
-
-newtype Time = Time {getTime :: UTCTime} deriving (Eq, Ord, Show)
-
-mkTime :: UTCTime -> Time
-mkTime = Time
-
-
-addHorizonToTime :: Time -> Horizon -> Time
-addHorizonToTime t h
-    = Time $ addUTCTime (horizonToNominalDiffTime h) (getTime t)
-
-horizonToNominalDiffTime :: Horizon -> NominalDiffTime
-horizonToNominalDiffTime = minutesToNominalDiffTime . fromIntegral . minutes
-
-minutesToNominalDiffTime :: Integer -> NominalDiffTime
-minutesToNominalDiffTime = secondsToNominalDiffTime . (*60)
-
-secondsToNominalDiffTime :: Integer -> NominalDiffTime
-secondsToNominalDiffTime s | s >= 0    = diffUTCTime b a
-                           | otherwise = diffUTCTime a b
-  where a = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
-        b = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime $ abs s)
-
-
-newtype Horizon = Minutes {minutes :: Int}
-  deriving (Eq, Ord, Show)
-
-type Horizons = [Horizon]
-
-mkHorizon :: (Integral a, Show a) => a -> EitherError Horizon
-mkHorizon m | m >= 0     = Right . Minutes . fromIntegral $ m
-            | otherwise  = mkError ("mkHorizon: '"
-                                ++ (show m)
-                                ++ "' Cannot be negative")
-
-mkHorizons :: (Integral a, Show a) => [a] -> EitherError Horizons
-mkHorizons [] = mkError "mkHorizons: Empty list"
-mkHorizons xs = let result = mapE mkHorizon "; " xs in
-                case result of
-                    Right hs -> Right . sort . nub $ hs
-                    e        -> e
-
-
-mkSchedule :: Text -> EitherError CronSchedule
-mkSchedule s = let result = parseOnly cronSchedule s in
-               case result of
-                 Right r -> Right r
-                 Left e  -> mkError e
-                
+instance DimensionIx ForecastTimeIx where
+    ixKey (ForecastTimeIx t h) = map pack [show t, show h]
