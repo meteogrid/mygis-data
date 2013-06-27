@@ -3,6 +3,7 @@
 import Data.Time.Clock
 import Data.Maybe
 import MyGIS.Data
+import MyGIS.Data.Units
 
 import Numeric.Units.Dimensional.TF.SIUnits (meter)
 import Numeric.Units.Dimensional.TF
@@ -22,7 +23,6 @@ main = do
         (Just b)= fromAnyStore st
         src     = getSource b ix :: RasterSource ObservationTimeIx RealLength
     print st
-    print (units b) 
-    print (dim b)
+    print (dimension b)
     print src
 

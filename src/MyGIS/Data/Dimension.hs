@@ -1,5 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
@@ -26,15 +27,22 @@ import           Data.Attoparsec.Text (parseOnly)
 
 import           MyGIS.Data.Error (EitherError, mapE, mkError)
 
-class (Show d, Typeable d) => Dimension d where
+class (Show d, Typeable d, Ord (DimIx d)) => Dimension d where
     type DimIx d :: *
-    next         :: d -> DimIx d -> DimIx d
-    prev         :: d -> DimIx d -> DimIx d
-    round        :: d -> DimIx d -> DimIx d
-    ceil         :: d -> DimIx d -> DimIx d
-    floor        :: d -> DimIx d -> DimIx d
-    listFrom     :: d -> DimIx d -> [DimIx d]
-    listFromTo   :: d -> DimIx d -> [DimIx d]
+    nextIx         :: d -> DimIx d -> DimIx d
+    prevIx         :: d -> DimIx d -> DimIx d
+    roundIx        :: d -> DimIx d -> DimIx d
+    ceilIx         :: d -> DimIx d -> DimIx d
+    floorIx        :: d -> DimIx d -> DimIx d
+    enumFromToIx   :: d -> DimIx d -> DimIx d -> [DimIx d]
+
+    enumFromToIx dim from to = worker start
+        where worker i | i `cond` end = i : worker (adv i)
+                       | otherwise    = []
+              start = floorIx dim from
+              end   = ceilIx dim to
+              adv   = (if from < to then nextIx else prevIx) dim
+              cond  = if from < to then (<=) else (>=)
 
 
 data ObservationTimeDimension = ObservationTimeDimension CronSchedule
@@ -51,24 +59,19 @@ instance Show ForecastTimeDimension where
 
 instance Dimension ObservationTimeDimension  where
     type DimIx ObservationTimeDimension = ObservationTimeIx
-    next = undefined
-    prev = undefined
-    ceil       = undefined
-    floor      = undefined
-    round      = undefined
-    listFrom   = undefined
-    listFromTo = undefined
+    nextIx       = undefined
+    prevIx       = undefined
+    ceilIx       = undefined
+    floorIx      = undefined
+    roundIx      = undefined
 
 instance Dimension ForecastTimeDimension where
     type DimIx ForecastTimeDimension = ForecastTimeIx
-    next = undefined
-    prev = undefined
-    ceil = undefined
-    floor = undefined
-    round = undefined
-    listFrom = undefined
-    listFromTo = undefined
-
+    nextIx       = undefined
+    prevIx       = undefined
+    ceilIx       = undefined
+    floorIx      = undefined
+    roundIx      = undefined
  
 
 data ObservationTimeIx = ObservationTimeIx Time

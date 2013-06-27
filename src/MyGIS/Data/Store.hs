@@ -8,16 +8,14 @@
 module MyGIS.Data.Store (
     IsStore (..)
   , AnyStore(..)
-  , RealLength
   , RasterStore (RasterStore)
   , sContext
   , sType
 ) where
 
 import           Data.Typeable (Typeable, cast)
-import           Numeric.Units.Dimensional.TF (Unit, DLength)
 import           MyGIS.Data.Context (Context)
-import           MyGIS.Data.Dimension (Dimension, DimIx)
+import           MyGIS.Data.Dimension (Dimension, DimIx, enumFromToIx)
 import           MyGIS.Data.Source (RasterSource(RasterSource))
 import           MyGIS.Data.Type (Type)
 
@@ -38,11 +36,13 @@ class (Typeable u, Eq (st d u), Show (st d u), Dimension d, Typeable (st d u))  
     type Src st d u :: *
     fromAnyStore    :: AnyStore -> Maybe (st d u)
     toAnyStore      :: st d u -> AnyStore
-    dim             :: st d u -> d
-    units           :: st d u -> u
     getSource       :: st d u -> DimIx d -> Src st d u
+    getSources      :: st d u -> DimIx d -> DimIx d -> [Src st d u]
+    dimension       :: st d u -> d
 
     fromAnyStore (AnyStore s _ _) = cast s
+    getSources s from to =
+        map (getSource s) (enumFromToIx (dimension s) from to)
 
 data RasterStore d u = RasterStore {
     rsType    :: Type
@@ -56,13 +56,9 @@ instance Eq (RasterStore d u) where
       (rsType s) == (rsType s') && (rsContext s) == (rsContext s')
 
 
-type RealLength = Unit DLength Double
-instance Show RealLength where show _ = "RealLength"
-
 instance (Typeable u, Show u, Eq u, Dimension d)
   => IsStore RasterStore d u where
     type Src RasterStore d u = RasterSource (DimIx d) u
     toAnyStore rs            = AnyStore rs (rsType rs) (rsContext rs)
     getSource rs ix          = RasterSource ix (rsUnits rs)
-    dim                      = rsDim
-    units                    = rsUnits
+    dimension                = rsDim

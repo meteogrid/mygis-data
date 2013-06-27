@@ -29,7 +29,8 @@ library
     MyGIS.Data.Source,
     MyGIS.Data.Context,
     MyGIS.Data.Dimension,
-    MyGIS.Data.SpatialReference
+    MyGIS.Data.SpatialReference,
+    MyGIS.Data.Units
   
   -- Modules included in this library but not exported.
   -- other-modules:       
