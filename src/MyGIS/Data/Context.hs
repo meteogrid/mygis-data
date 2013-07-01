@@ -55,8 +55,11 @@ mkBox x0 y0 x1 y1
 
 intersection :: Pair a b => Box a -> Box a -> Maybe (Box a)
 intersection a b = case i of {Right r -> Just r; Left _ -> Nothing}
-  where i    = mkBox (pj minx) (pj miny) (pj maxx) (pj maxy)
-        pj f = (f a `min` f b) + abs (f a - f b)
+  where i    = mkBox
+               (max (minx a) (minx b))
+               (max (miny a) (miny b))
+               (min (maxx a) (maxx b))
+               (min (maxy a) (maxy b))
 
 intersects :: Pair a b => Box a -> Box a -> Bool
 intersects a = isJust . intersection a
