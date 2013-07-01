@@ -3,3 +3,4 @@
 .fuse_hidden*
 *.swp
 dist
+.hpc

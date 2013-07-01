@@ -1,5 +1,8 @@
 module MyGIS.Data.SpatialReference (
-    SpatialReference(..)
+    SpatialReference
+  , epsg25830
 ) where
 
 type SpatialReference = String
+
+epsg25830 = "dummy"

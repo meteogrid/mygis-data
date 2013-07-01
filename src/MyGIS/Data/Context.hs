@@ -19,6 +19,8 @@ module MyGIS.Data.Context (
   , miny
   , maxx
   , maxy
+  , width
+  , height
 
   , forward
   , backward
@@ -34,13 +36,16 @@ import           MyGIS.Data.Error (mkError, EitherError)
 
 
 data Context = Context {
-                    cid   :: !Text
-                  , box   :: !Envelope
-                  , shape :: !Shape
-                  , srs   :: !SpatialReference
+    cid      :: !Text
+  , envelope :: !Envelope
+  , shape    :: !Shape
+  , srs      :: !SpatialReference
 } deriving (Eq, Show)
 
-data Box a = Box {ll :: !a, ur :: !a} deriving (Eq, Show)
+data Box a = Box {
+    ll :: !a
+  , ur :: !a
+} deriving (Eq, Show)
 
 mkBox :: Pair a
   => PairType a
@@ -67,6 +72,11 @@ class (Eq (PairType a), Show (PairType a), Num (PairType a), Ord (PairType a))
     getY   :: a -> PairType a
     mkPair :: PairType a -> PairType a -> a
 
+{-# SPECIALIZE INLINE getX :: Point -> Double #-}
+{-# SPECIALIZE INLINE getY :: Point -> Double #-}
+{-# SPECIALIZE INLINE getX :: Pixel -> Int #-}
+{-# SPECIALIZE INLINE getY :: Pixel -> Int #-}
+
 
 newtype Pixel = Pixel (Int,Int) deriving (Eq, Show)
 newtype Point = Point (Double,Double) deriving (Eq, Show)
@@ -88,6 +98,10 @@ width, height :: Pair a => Box a -> PairType a
 width  b = (maxx b) - (minx b)
 height b = (maxy b) - (miny b)
 
+{-# SPECIALIZE INLINE width :: Envelope -> Double #-}
+{-# SPECIALIZE INLINE height :: Envelope -> Double #-}
+{-# SPECIALIZE INLINE width :: Shape -> Int #-}
+{-# SPECIALIZE INLINE height :: Shape -> Int #-}
 
 type Shape = Box Pixel
 
@@ -105,46 +119,33 @@ maxx = getX . ur
 miny = getY . ll
 maxy = getY . ur
 
+{-# SPECIALIZE INLINE minx :: Envelope -> Double #-}
+{-# SPECIALIZE INLINE miny :: Envelope -> Double #-}
+{-# SPECIALIZE INLINE maxx :: Envelope -> Double #-}
+{-# SPECIALIZE INLINE maxy :: Envelope -> Double #-}
+{-# SPECIALIZE INLINE minx :: Shape -> Int #-}
+{-# SPECIALIZE INLINE miny :: Shape -> Int #-}
+{-# SPECIALIZE INLINE maxx :: Shape -> Int #-}
+{-# SPECIALIZE INLINE maxy :: Shape -> Int #-}
 
 
 forward :: Context -> Point -> Pixel
-forward ctx = point2pixel (geotransform ctx)
+forward ctx (Point (x,y)) = Pixel (round ln, round col)
+    where col = (x - (minx e)) * sx
+          ln  = ((maxy e) - y) * sy
+          e   = envelope ctx
+          s   = shape ctx
+          sx  = (fromIntegral (width s)) / width e
+          sy  = (fromIntegral (height s)) / height e
 
 backward :: Context -> Pixel -> Point
-backward ctx = pixel2point (geotransform ctx)
+backward ctx (Pixel (ln,col)) = Point (x, y)
+    where x = (minx e) + (fromIntegral col) / sx
+          y = (maxy e) - (fromIntegral ln) / sy
+          e   = envelope ctx
+          s   = shape ctx
+          sx  = (fromIntegral (width s)) / width e
+          sy  = (fromIntegral (height s)) / height e
 
--- Tipo para la matriz de transformacion
-data GeoTransform = GeoTransform !Double !Double !Double !Double !Double !Double
-    deriving (Eq, Show)
-
-
--- para construir una matriz de transformacion a partir de
--- un bbox y forma del raster
-mkGeoTransform :: Envelope -> Shape -> GeoTransform
-mkGeoTransform b s =
-    GeoTransform (minx b) dx 0 (maxy b) 0 (-dy)
-    where dx = width b  / fromIntegral (width s)
-          dy = height b / fromIntegral (height s)
-
-geotransform :: Context -> GeoTransform
-geotransform c = mkGeoTransform (box c) (shape c)
-
-
-pixel2point :: GeoTransform -> Pixel -> Point
-pixel2point (GeoTransform gt0 gt1 gt2 gt3 gt4 gt5) (Pixel (ln, col))
-    = Point (x, y)
-  where x    = gt0 + col'*gt1 + ln'*gt2
-        y    = gt3 + col'*gt4 + ln'*gt5
-        col' = fromIntegral col
-        ln'  = fromIntegral ln
-    
-point2pixel :: GeoTransform -> Point -> Pixel
-point2pixel (GeoTransform gt0 gt1 gt2 gt3 gt4 gt5) (Point (x, y))
-    = Pixel (floor ln, floor col)
-  where ln     = detA1B  / detA
-        col    = detA2B  / detA
-        detA   = gt1*gt5 - gt2*gt4
-        detA1B = gt1*y'   + gt4*x'
-        detA2B = gt2*y'   + gt5*x'
-        x'     = x - gt0
-        y'     = y - gt3
+{-# INLINE forward #-}
+{-# INLINE backward #-}

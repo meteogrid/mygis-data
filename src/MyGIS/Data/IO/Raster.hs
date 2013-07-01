@@ -5,6 +5,7 @@ module MyGIS.Data.IO.Raster (
 
   , readWindow
   , generatePixel
+  , generatePoint
 
 ) where
 

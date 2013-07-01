@@ -1,7 +1,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-} 
-{-# LANGUAGE FlexibleInstances, TemplateHaskell #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-module TestContext where
+module TestContext (tests) where
 
 import Test.QuickCheck
 import Test.Framework.TH
@@ -16,10 +19,35 @@ instance Arbitrary Envelope where
     arbitrary = do
         x0 <- choose (-1000,1000)
         y0 <- choose (-1000,1000)
-        w  <- choose (1,1000)
-        h  <- choose (1,1000)
+        w  <- choose (1,5e6)
+        h  <- choose (1,5e6)
         let Right r = mkEnvelope x0 y0 (x0 + w) (y0 + h)
         return r
+
+instance Arbitrary Shape where
+    arbitrary = do
+        w <- choose (1,round 9e3)
+        h <- choose (1,round 9e3)
+        let Right r = mkShape w h
+        return r
+
+instance Arbitrary Context where
+    arbitrary = do
+        e <- arbitrary
+        s <- arbitrary
+        return $ Context "" e s ""
+
+instance Arbitrary Pixel where
+    arbitrary = do
+        x <- choose (round (-9e3), round 9e3)
+        y <- choose (round (-9e3), round 9e3)
+        return $ Pixel (x,y)
+
+instance Arbitrary Point where
+    arbitrary = do
+        x <- choose (-9e3,9e3)
+        y <- choose (-9e3,9e3)
+        return $ Point (x,y)
 
 prop_envelopes_equality :: Envelope -> Envelope -> Bool
 prop_envelopes_equality a b
@@ -27,17 +55,41 @@ prop_envelopes_equality a b
     | otherwise = all (\f -> f a /= f b) [minx, miny, maxx, maxy]
 
 
+eitherFails, eitherSucceeds :: forall a b. Either a b -> Bool
+eitherFails = either (\_ -> True) (\_ -> False)
+eitherSucceeds = either (\_ -> False) (\_ -> True)
+
+isValidConstruction :: forall a b. Bool -> Either a b -> Bool
+isValidConstruction cond ctr = if cond then eitherSucceeds ctr
+                                       else eitherFails ctr
+
 prop_mkEnvelope_only_constructs_correct_envelopes ::
     Double -> Double -> Double -> Double -> Bool
 prop_mkEnvelope_only_constructs_correct_envelopes x0 y0 x1 y1
-    | x0<x1 && y0<y1
-        = case mkEnvelope x0 y0 x1 y1 of
-               Right _ -> True
-               Left _  -> False
-    | otherwise
-        = case mkEnvelope x0 y0 x1 y1 of
-               Right _ -> False
-               Left _  -> True
+    = isValidConstruction (x0<x1 && y0<y1) $ mkEnvelope x0 y0 x1 y1
 
+prop_mkShape_only_constructs_correct_shapes :: Int -> Int -> Bool
+prop_mkShape_only_constructs_correct_shapes w h
+    = isValidConstruction (w>0 && h>0) $ mkShape w h
+
+prop_all_shapes_intersect :: Shape -> Shape -> Bool
+prop_all_shapes_intersect = intersects
+
+almostEqual a b e = abs (a - b) < e
+
+prop_forward_backward_is_id :: Context -> Pixel -> Bool
+prop_forward_backward_is_id ctx px
+    = let bf = (forward ctx) . (backward ctx)
+      in bf px == px
+
+prop_backward_forward_is_almost_id :: Context -> Point -> Bool
+prop_backward_forward_is_almost_id ctx pt
+    = let fb            = (backward ctx) . (forward ctx)
+          e             = (envelope ctx)
+          Point (x,y)   = pt
+          Point (x',y') = fb pt
+          rtol          = 0.01
+          epsilon       = max (width e * rtol) (height e * rtol)
+      in (abs (x-x') < epsilon) && (abs (y-y') < epsilon)
 
 tests = $(testGroupGenerator)
