@@ -7,17 +7,27 @@ module MyGIS.Data.Context (
     Context (..)
   , Pixel (..)
   , Point (..)
+  , Box
   , Envelope
   , Shape
 
+  , mkBox
   , mkShape
   , mkEnvelope
 
+  , minx
+  , miny
+  , maxx
+  , maxy
+
   , forward
   , backward
+  , intersection
+  , intersects
 ) where
 
 import           Data.Text (Text)
+import           Data.Maybe (isJust)
 
 import           MyGIS.Data.SpatialReference (SpatialReference)
 import           MyGIS.Data.Error (mkError, EitherError)
@@ -32,10 +42,31 @@ data Context = Context {
 
 data Box a = Box {ll :: !a, ur :: !a} deriving (Eq, Show)
 
-class (Eq (PairType a), Show (PairType a), Num (PairType a)) => Pair a where
+mkBox :: Pair a
+  => PairType a
+  -> PairType a
+  -> PairType a
+  -> PairType a
+  ->  EitherError (Box a)
+mkBox x0 y0 x1 y1
+    | x1>x0 && y1>y0 = Right $ Box (mkPair x0 y0) (mkPair x1 y1)
+    | otherwise      = mkError "mkBox: x1<=x0 or y1<=y0"
+
+intersection :: Pair a => Box a -> Box a -> Maybe (Box a)
+intersection a b = case i of {Right r -> Just r; Left _ -> Nothing}
+  where i    = mkBox (pj minx) (pj miny) (pj maxx) (pj maxy)
+        pj f = (f a `min` f b) + abs (f a - f b)
+
+intersects :: Pair a => Box a -> Box a -> Bool
+intersects a = isJust . intersection a
+
+class (Eq (PairType a), Show (PairType a), Num (PairType a), Ord (PairType a))
+  => Pair a where
     type PairType a :: *
-    getX :: a -> PairType a
-    getY :: a -> PairType a
+    getX   :: a -> PairType a
+    getY   :: a -> PairType a
+    mkPair :: PairType a -> PairType a -> a
+
 
 newtype Pixel = Pixel (Int,Int) deriving (Eq, Show)
 newtype Point = Point (Double,Double) deriving (Eq, Show)
@@ -44,11 +75,13 @@ instance Pair Pixel where
     type PairType Pixel = Int
     getX (Pixel (x,_)) = x
     getY (Pixel (_,y)) = y
+    mkPair = curry Pixel
 
 instance Pair Point where
     type PairType Point = Double
     getX (Point (x,_)) = x
     getY (Point (_,y)) = y
+    mkPair = curry Point
 
 -- definimos la altura y ancho de una caja
 width, height :: Pair a => Box a -> PairType a
@@ -59,15 +92,12 @@ height b = (maxy b) - (miny b)
 type Shape = Box Pixel
 
 mkShape :: Int -> Int -> EitherError Shape
-mkShape x y | x>0 && y>0 = Right $ Box (Pixel (0,0)) (Pixel (x,y))
-            | otherwise  =  mkError "mkShape: x and y must be both > 0"
+mkShape x y = mkBox 0 0 x y
 
 type Envelope = Box Point
 
 mkEnvelope :: Double -> Double -> Double -> Double ->  EitherError Envelope
-mkEnvelope x0 y0 x1 y1
-    | x1>x0 && y1>y0 = Right $ Box (Point (x0,y0)) (Point (x1,y1))
-    | otherwise      = mkError "mkEnvelope: x1<=x0 or y1<=y0"
+mkEnvelope = mkBox
 
 minx, maxx, miny, maxy :: Pair a => Box a -> PairType a
 minx = getX . ll

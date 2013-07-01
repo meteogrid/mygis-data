@@ -2,6 +2,7 @@
 
 import Data.Time.Clock
 import Data.Maybe
+import qualified Control.Monad.Error as E
 import MyGIS.Data
 import MyGIS.Data.Units
 
@@ -10,7 +11,7 @@ import Numeric.Units.Dimensional.TF
 
 
 main = do
-    let ctx = Context "pen_horarias_500_utm30" (Box 0 0 10 10) (Shape 10 10) ""
+    let Right ctx = E.liftM4 Context (Right "pen_horarias_500_utm30") (mkEnvelope 0 0 10 10) (mkShape 10 10) (Right "")
         rs :: RasterStore ObservationTimeDimension RealLength
         rs       = RasterStore (mkType "altura") ctx (ObservationTimeDimension vt) meter
         st        = toAnyStore rs
@@ -21,7 +22,8 @@ main = do
         b :: RasterStore ObservationTimeDimension RealLength
         ix2     = ForecastTimeIx (mkTime t) h
         (Just b)= fromAnyStore st
-        src     = getSource b ix :: RasterSource ObservationTimeIx RealLength
+        src :: Src RasterStore ObservationTimeDimension RealLength
+        src     = getSource b ix
     print st
     print (dimension b)
     print src
