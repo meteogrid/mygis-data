@@ -48,7 +48,7 @@ library
     time                      >= 1.4       && < 1.5,
     vector                    >= 0.10      && < 0.11
 
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -fllvm -O2
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -fllvm -optlo-O3 -O2
 
 test-suite Main
   type:            exitcode-stdio-1.0

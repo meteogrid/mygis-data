@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module MyGIS.Data.Context (
     Context (..)
@@ -42,35 +41,30 @@ data Context = Context {
   , srs      :: !SpatialReference
 } deriving (Eq, Show)
 
+
 data Box a = Box {
     ll :: !a
   , ur :: !a
 } deriving (Eq, Show)
 
-mkBox :: Pair a
-  => PairType a
-  -> PairType a
-  -> PairType a
-  -> PairType a
-  ->  EitherError (Box a)
+mkBox :: Pair a b
+  => b -> b -> b -> b ->  EitherError (Box a)
 mkBox x0 y0 x1 y1
-    | x1>x0 && y1>y0 = Right $ Box (mkPair x0 y0) (mkPair x1 y1)
+    | x1>x0 && y1>y0 = Right $ Box (mkPair (x0,y0)) (mkPair (x1,y1))
     | otherwise      = mkError "mkBox: x1<=x0 or y1<=y0"
 
-intersection :: Pair a => Box a -> Box a -> Maybe (Box a)
+intersection :: Pair a b => Box a -> Box a -> Maybe (Box a)
 intersection a b = case i of {Right r -> Just r; Left _ -> Nothing}
   where i    = mkBox (pj minx) (pj miny) (pj maxx) (pj maxy)
         pj f = (f a `min` f b) + abs (f a - f b)
 
-intersects :: Pair a => Box a -> Box a -> Bool
+intersects :: Pair a b => Box a -> Box a -> Bool
 intersects a = isJust . intersection a
 
-class (Eq (PairType a), Show (PairType a), Num (PairType a), Ord (PairType a))
-  => Pair a where
-    type PairType a :: *
-    getX   :: a -> PairType a
-    getY   :: a -> PairType a
-    mkPair :: PairType a -> PairType a -> a
+class (Eq b, Show b, Num b, Ord b) => Pair a b | a->b where
+    getX   :: a      -> b
+    getY   :: a      -> b
+    mkPair :: (b, b) -> a
 
 {-# SPECIALIZE INLINE getX :: Point -> Double #-}
 {-# SPECIALIZE INLINE getY :: Point -> Double #-}
@@ -78,25 +72,23 @@ class (Eq (PairType a), Show (PairType a), Num (PairType a), Ord (PairType a))
 {-# SPECIALIZE INLINE getY :: Pixel -> Int #-}
 
 
-newtype Pixel = Pixel (Int,Int) deriving (Eq, Show)
-newtype Point = Point (Double,Double) deriving (Eq, Show)
+data Pixel = Pixel !(Int,Int) deriving (Eq, Show)
+data Point = Point !(Double,Double) deriving (Eq, Show)
 
-instance Pair Pixel where
-    type PairType Pixel = Int
-    getX (Pixel (x,_)) = x
-    getY (Pixel (_,y)) = y
-    mkPair = curry Pixel
+instance Pair Pixel Int where
+    getX !(Pixel (x,_)) = x
+    getY !(Pixel (_,y)) = y
+    mkPair = Pixel
 
-instance Pair Point where
-    type PairType Point = Double
-    getX (Point (x,_)) = x
-    getY (Point (_,y)) = y
-    mkPair = curry Point
+instance Pair Point Double where
+    getX !(Point (x,_)) = x
+    getY !(Point (_,y)) = y
+    mkPair = Point
 
 -- definimos la altura y ancho de una caja
-width, height :: Pair a => Box a -> PairType a
-width  b = (maxx b) - (minx b)
-height b = (maxy b) - (miny b)
+width, height :: Pair a b => Box a -> b
+width  !b = (maxx b) - (minx b)
+height !b = (maxy b) - (miny b)
 
 {-# SPECIALIZE INLINE width :: Envelope -> Double #-}
 {-# SPECIALIZE INLINE height :: Envelope -> Double #-}
@@ -113,7 +105,7 @@ type Envelope = Box Point
 mkEnvelope :: Double -> Double -> Double -> Double ->  EitherError Envelope
 mkEnvelope = mkBox
 
-minx, maxx, miny, maxy :: Pair a => Box a -> PairType a
+minx, maxx, miny, maxy :: Pair a b => Box a -> b
 minx = getX . ll
 maxx = getX . ur
 miny = getY . ll
