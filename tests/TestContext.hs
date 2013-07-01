@@ -40,15 +40,15 @@ instance Arbitrary Context where
 
 instance Arbitrary Pixel where
     arbitrary = do
-        x <- choose (-9e3, 9e3) :: Gen Double
-        y <- choose (-9e3, 9e3) :: Gen Double
-        return $ Pixel (round x, round y)
+        x <- choose (0, 9e3) :: Gen Double
+        y <- choose (0, 9e3) :: Gen Double
+        return $ Pixel (round x) (round y)
 
 instance Arbitrary Point where
     arbitrary = do
         x <- choose (-9e3,9e3) :: Gen Double
         y <- choose (-9e3,9e3) :: Gen Double
-        return $ Point (x,y)
+        return $ Point x y
 
 prop_envelopes_equality :: Envelope -> Envelope -> Bool
 prop_envelopes_equality a b
@@ -84,14 +84,15 @@ prop_forward_backward_is_id ctx px
     = let bf = (forward ctx) . (backward ctx)
       in bf px == px
 
-prop_backward_forward_is_almost_id :: Context -> Point -> Bool
-prop_backward_forward_is_almost_id ctx pt
-    = let fb            = (backward ctx) . (forward ctx)
-          e             = (envelope ctx)
-          Point (x,y)   = pt
-          Point (x',y') = fb pt
-          rtol          = 0.01
-          epsilon       = max (width e * rtol) (height e * rtol)
+
+prop_backwardS_forwardS_is_almost_id :: Context -> Point -> Bool
+prop_backwardS_forwardS_is_almost_id ctx pt
+    = let fb          = (backwardS ctx) . (forwardS ctx)
+          e           = (envelope ctx)
+          Point x  y  = pt
+          Point x' y' = fb pt
+          rtol        = 0.000001
+          epsilon     = max (width e * rtol) (height e * rtol)
       in (abs (x-x') < epsilon) && (abs (y-y') < epsilon)
 
 
