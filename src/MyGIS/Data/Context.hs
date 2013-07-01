@@ -1,9 +1,18 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module MyGIS.Data.Context (
     Context (..)
-  , Box (..)
-  , Shape (..)
+  , Pixel (..)
+  , Point (..)
+  , Envelope
+  , Shape
+
+  , mkShape
+  , mkEnvelope
+
   , forward
   , backward
 ) where
@@ -11,26 +20,61 @@ module MyGIS.Data.Context (
 import           Data.Text (Text)
 
 import           MyGIS.Data.SpatialReference (SpatialReference)
+import           MyGIS.Data.Error (mkError, EitherError)
 
 
 data Context = Context {
                     cid   :: !Text
-                  , box   :: !Box
+                  , box   :: !Envelope
                   , shape :: !Shape
                   , srs   :: !SpatialReference
 } deriving (Eq, Show)
 
-data Box = Box {
-             x0   :: !Double   
-           , y0   :: !Double   
-           , x1   :: !Double   
-           , y1   :: !Double   
-} deriving (Eq, Show)
+data Box a = Box {ll :: !a, ur :: !a} deriving (Eq, Show)
 
-data Shape = Shape {
-               nx  :: !Int 
-             , ny  :: !Int
-} deriving (Eq, Show)
+class (Eq (PairType a), Show (PairType a), Num (PairType a)) => Pair a where
+    type PairType a :: *
+    getX :: a -> PairType a
+    getY :: a -> PairType a
+
+newtype Pixel = Pixel (Int,Int) deriving (Eq, Show)
+newtype Point = Point (Double,Double) deriving (Eq, Show)
+
+instance Pair Pixel where
+    type PairType Pixel = Int
+    getX (Pixel (x,_)) = x
+    getY (Pixel (_,y)) = y
+
+instance Pair Point where
+    type PairType Point = Double
+    getX (Point (x,_)) = x
+    getY (Point (_,y)) = y
+
+-- definimos la altura y ancho de una caja
+width, height :: Pair a => Box a -> PairType a
+width  b = (maxx b) - (minx b)
+height b = (maxy b) - (miny b)
+
+
+type Shape = Box Pixel
+
+mkShape :: Int -> Int -> EitherError Shape
+mkShape x y | x>0 && y>0 = Right $ Box (Pixel (0,0)) (Pixel (x,y))
+            | otherwise  =  mkError "mkShape: x and y must be both > 0"
+
+type Envelope = Box Point
+
+mkEnvelope :: Double -> Double -> Double -> Double ->  EitherError Envelope
+mkEnvelope x0 y0 x1 y1
+    | x1>x0 && y1>y0 = Right $ Box (Point (x0,y0)) (Point (x1,y1))
+    | otherwise      = mkError "mkEnvelope: x1<=x0 or y1<=y0"
+
+minx, maxx, miny, maxy :: Pair a => Box a -> PairType a
+minx = getX . ll
+maxx = getX . ur
+miny = getY . ll
+maxy = getY . ur
+
 
 
 forward :: Context -> Point -> Pixel
@@ -43,24 +87,18 @@ backward ctx = pixel2point (geotransform ctx)
 data GeoTransform = GeoTransform !Double !Double !Double !Double !Double !Double
     deriving (Eq, Show)
 
--- definimos la altura y ancho de una caja
-width, height :: Box -> Double
-width  b = (x1 b) - (x0 b)
-height b = (y1 b) - (y0 b)
 
 -- para construir una matriz de transformacion a partir de
 -- un bbox y forma del raster
-mkGeoTransform :: Box -> Shape -> GeoTransform
+mkGeoTransform :: Envelope -> Shape -> GeoTransform
 mkGeoTransform b s =
-    GeoTransform (x0 b) dx 0 (y1 b) 0 (-dy)
-    where dx = width b / fromIntegral (nx s)
-          dy = height b / fromIntegral (ny s)
+    GeoTransform (minx b) dx 0 (maxy b) 0 (-dy)
+    where dx = width b  / fromIntegral (width s)
+          dy = height b / fromIntegral (height s)
 
 geotransform :: Context -> GeoTransform
 geotransform c = mkGeoTransform (box c) (shape c)
 
-newtype Pixel = Pixel (Int, Int) deriving (Eq, Show)
-newtype Point = Point (Double, Double) deriving (Eq, Show)
 
 pixel2point :: GeoTransform -> Pixel -> Point
 pixel2point (GeoTransform gt0 gt1 gt2 gt3 gt4 gt5) (Pixel (ln, col))
