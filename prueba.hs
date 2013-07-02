@@ -11,7 +11,7 @@ import Numeric.Units.Dimensional.TF
 
 
 main = do
-    let Right ctx = E.liftM4 Context (Right "pen_horarias_500_utm30") (mkEnvelope 0 0 10 10) (mkShape 10 10) (Right "")
+    let Right ctx = mkContext "pen_horarias_500_utm30" (mkEnvelope 0 0 10 10) (mkShape 10 10) ""
         rs :: RasterStore ObservationTimeDimension RealLength
         rs       = RasterStore (mkType "altura") ctx (ObservationTimeDimension vt) meter
         st        = toAnyStore rs
