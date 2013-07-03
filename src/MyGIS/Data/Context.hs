@@ -36,8 +36,12 @@ module MyGIS.Data.Context (
   , union
 ) where
 
+import           Control.Applicative ((<$>), (<*>))
+
 import           Data.Text (Text)
+import           Data.Text.Binary()
 import           Data.Monoid (Monoid(..))
+import           Data.Binary (Binary(..))
 
 import           MyGIS.Data.SpatialReference (SpatialReference)
 import           MyGIS.Data.Error (mkError, EitherError)
@@ -49,6 +53,10 @@ data Context = Context {
   , shape    :: !Shape
   , srs      :: !SpatialReference
   } deriving (Eq, Show)
+
+instance Binary Context where
+  put (Context a b c d) = put a >> put b >> put c >> put d
+  get                   = Context <$> get <*> get <*> get <*> get
 
 mkContext ::
   Text -> Envelope -> Shape -> SpatialReference -> EitherError Context
@@ -66,6 +74,10 @@ data Box a = Box {
 instance (Ord a, Num a) => Monoid (Box a) where
     mempty = emptyBox
     mappend = union
+
+instance (Binary a) => Binary (Box a) where
+  put (Box a b c d) = put a >> put b >> put c >> put d
+  get               = Box <$> get <*> get <*> get <*> get
 
 emptyBox :: (Num a, Ord a) => Box a
 emptyBox = Box 0 0 0 0
