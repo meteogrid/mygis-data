@@ -54,7 +54,7 @@ data Options = Opts {
 } deriving (Eq, Show)
 
 
-data Block = Block (St.Vector DataType)
+data Block = Block !(St.Vector DataType)
 
 newtype BlockIx = BlockIx (Int,Int) deriving (Eq,Show)
 
@@ -68,10 +68,12 @@ numBlocks ctx opts = (ceiling (nx/bx), ceiling (ny/by))
 
 
 instance Binary Options where
+  {-# INLINE put #-}
   put (Opts c (bx,by))
     = put (enc c) >> put bx >> put by
     where enc (Just a) = a
           enc Nothing  = -1
+  {-# INLINE get #-}
   get
     = do c <- get
          let comp = case c of
@@ -82,17 +84,23 @@ instance Binary Options where
          return (Opts comp (bx,by))
 
 instance Binary BlockRef where
+  {-# INLINE put #-}
   put (BlockRef a b) = put a >> put b
+  {-# INLINE get #-}
   get                = BlockRef <$> get <*> get
 
     
 instance Binary FileHeader where
+  {-# INLINE put #-}
   put (FileHeader a b c) = put a >> put b >> put c
+  {-# INLINE get #-}
   get                    = FileHeader <$> get <*> get <*> get
 
 
 instance Binary Block where
+  {-# INLINE put #-}
   put (Block a) = put a
+  {-# INLINE get #-}
   get           = Block <$> get
 
 
@@ -130,11 +138,12 @@ reader h = runIdentityK initialize
         case ref of
             Just (BlockRef off len) -> do
                 lift $ hSeek h AbsoluteSeek (fromIntegral off)
-                block <- lift $ liftM decode $ BS.hGet h (fromIntegral len)
+                !block <- lift $ liftM decode $ BS.hGet h (fromIntegral len)
                 next <- respond block
                 loop fh next
             Nothing -> error "corrupted file" -- TODO: throw catchable exception
 
+{-# INLINE getRef #-}
 getRef :: FileHeader -> BlockIx -> Maybe BlockRef
 getRef (FileHeader opts ctx refs) (BlockIx (x,y))
     = let nx = fst $ numBlocks ctx opts
@@ -180,8 +189,8 @@ writer h raster () = runIdentityP $ do
     -- Request all blocks from pipe and write them to file while updating
     -- mutable list of BlockRefs
     forM_ indexes $ \ix -> do
-        block <- request ix
-        let encoded = encode block
+        !block <- request ix
+        let !encoded = encode block
             len     = fromIntegral . BS.length $ encoded
         off <- lift $ liftM fromIntegral $ hTell h
         lift $ BS.hPut h encoded
@@ -217,7 +226,7 @@ pixelGenerator f raster = runIdentityK loop
         let (nx,ny) = blockSize . options $ raster
             x0      = nx * bx
             y0      = ny * by
-            block   = Block $ St.generate (nx*ny) $ genPx
+            !block   = Block $ St.generate (nx*ny) $ genPx
             genPx i = let (x,y) = i `divMod` nx
                           px    = Pixel (x0+x) (y0+y)
                       in f px

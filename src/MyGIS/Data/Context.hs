@@ -47,7 +47,7 @@ import           MyGIS.Data.SpatialReference (SpatialReference)
 import           MyGIS.Data.Error (mkError, EitherError)
 
 
-data Context = Context {
+data Context = Context {    
     cid      :: !Text
   , envelope :: !Envelope
   , shape    :: !Shape
