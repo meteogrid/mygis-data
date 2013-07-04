@@ -4,6 +4,7 @@
 
 module TestRasterIO (tests) where
 
+import Data.Maybe
 import System.IO
 import System.IO.Temp
 import System.FilePath
@@ -46,12 +47,18 @@ case_reader_and_writer_can_duplicate_raster = do
         runSession $
             readerS raster >-> writerS raster2
 
-        Just size <- getFileSize path1
-        assertBool "File too small" $ size > 1000*1000*2
-
+        assertExistsAndSizeGreaterThan path1 (1000*1000*2)
+        assertExistsAndSizeGreaterThan path2 (1000*1000*2)
         assertFilesEqual path1 path2
         
 
+assertExistsAndSizeGreaterThan :: FilePath -> Integer -> IO ()
+assertExistsAndSizeGreaterThan p s = do
+    size <- getFileSize p
+    assertBool ("file " ++ show p ++ " was not created") (isJust size)
+    assertBool ("File size of " ++ show p ++ " is less than " ++ show s)
+               (fromJust size > s)
+    
 
 assertFilesEqual :: FilePath -> FilePath -> IO ()
 assertFilesEqual a b =
