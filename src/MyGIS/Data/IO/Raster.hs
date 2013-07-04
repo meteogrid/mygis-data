@@ -18,13 +18,13 @@ module MyGIS.Data.IO.Raster
   , try
 ) where
 
-import           Control.Applicative ((<$>), (<*>))
-import           Control.DeepSeq (force, NFData(..))
-import           Control.Monad (forM_, liftM)
+import           Control.Applicative
+import           Control.DeepSeq
+import           Control.Monad
 import           Control.Proxy
 import           Control.Proxy.Safe
-import           Data.Binary (Binary(..), decode, encode)
-import           Data.Int (Int64, Int16)
+import           Data.Binary
+import           Data.Int
 import qualified Data.Vector.Storable as St
 import qualified Data.Vector.Storable.Mutable as Stm
 import qualified Data.ByteString.Lazy as BS
@@ -43,7 +43,11 @@ data Raster = Raster {
   , path    :: FilePath
 }
 
-data FileHeader = FileHeader !Options !Context !(St.Vector BlockOffset)
+data FileHeader = FileHeader Version !Options !Context !(St.Vector BlockOffset)
+data Version = Version !Int8 !Int8
+
+version10 = Version 1 0
+fileHeader10 = FileHeader version10
 
 instance NFData FileHeader where
 
@@ -88,9 +92,12 @@ instance Binary Options where
     
 instance Binary FileHeader where
   {-# INLINE put #-}
-  put (FileHeader a b c) = put a >> put b >> put c
+  put (FileHeader (Version mj mn) a b c)
+    = put mj >> put mn >> put a >> put b >> put c
   {-# INLINE get #-}
-  get                    = FileHeader <$> get <*> get <*> get
+  get
+    = do version <- Version <$> get <*> get
+         FileHeader <$> (pure version) <*> get <*> get <*> get
 
 
 instance Binary Block where
@@ -124,7 +131,7 @@ reader h = runIdentityK initialize
 
 {-# INLINE getOffLen #-}
 getOffLen :: FileHeader -> BlockIx -> Maybe (Integer, Int)
-getOffLen (FileHeader opts ctx refs) (BlockIx x y)
+getOffLen (FileHeader _ opts ctx refs) (BlockIx x y)
     = do let nx = fst $ numBlocks ctx opts
          off  <- refs St.!? (nx*y + x)
          off' <- refs St.!? (nx*y + x + 1)
@@ -161,7 +168,7 @@ writer h raster () = runIdentityP $ do
     -- Create a dummy healdeocr with the correct number of refs to compute
     -- the first block's offset.
     -- FIXME: Calculate offset without encoding a dummy header
-    let header    = FileHeader (options raster) (context raster) dummyRefs
+    let header    = fileHeader10 (options raster) (context raster) dummyRefs
         dummyRefs = St.replicate nRefs 0
         nRefs     = nx * ny + 1
         fstBlkOff = fromIntegral . BS.length . encode $ header
@@ -186,7 +193,7 @@ writer h raster () = runIdentityP $ do
 
     blockRefs' <- lift $ St.unsafeFreeze blockRefs
     -- Create final header and write it at the beginning of the file
-    let finalHeader = FileHeader (options raster) (context raster) blockRefs'
+    let finalHeader = fileHeader10 (options raster) (context raster) blockRefs'
     lift $ hSeek h AbsoluteSeek 0
     lift $ BS.hPut h (encode finalHeader)
 
