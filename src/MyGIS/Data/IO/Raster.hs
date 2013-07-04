@@ -17,7 +17,7 @@ module MyGIS.Data.IO.Raster
   , (>->)
   , try
 ) where
-
+import           Codec.Compression.GZip hiding (compress, decompress)
 import           Control.Applicative
 import           Control.DeepSeq
 import           Control.Monad
@@ -43,19 +43,41 @@ data Raster = Raster {
   , path    :: FilePath
 }
 
-data FileHeader = FileHeader Version !Options !Context !(St.Vector BlockOffset)
-data Version = Version !Int8 !Int8
+data FileHeader = FileHeader {
+    fhVersion :: Version
+  , fhOptions :: !Options
+  , fhContext :: !Context
+  , fhOffsets :: !(St.Vector BlockOffset)
+} deriving Show
+
+data Version = Version !Int8 !Int8 deriving Show
 
 version10 = Version 1 0
 fileHeader10 = FileHeader version10
 
 instance NFData FileHeader where
 
+-- TODO: create smart constructor that verifies compression level and blocksize
 data Options = Opts {
     compression :: Maybe Int
   , blockSize   :: (Int,Int)
-} deriving (Eq, Show)
+} deriving Show
 
+
+compressor :: Options -> BS.ByteString -> BS.ByteString
+compressor opts
+    = case (compression opts) of
+           Nothing  -> id         
+           (Just l) -> compressWith defaultCompressParams {
+                compressLevel = compressionLevel l
+              , compressStrategy = huffmanOnlyStrategy
+              }
+
+decompressor :: Options -> BS.ByteString -> BS.ByteString
+decompressor opts
+    = case (compression opts) of
+           Nothing  -> id         
+           (Just l) -> decompressWith defaultDecompressParams
 
 data Block = Block !(St.Vector DataType)
 
@@ -121,10 +143,12 @@ reader h = runIdentityK initialize
         loop (force $ decode contents) ix
     loop !fh ix = do
         let ref = getOffLen fh ix
+            decompress = decompressor (fhOptions fh)
         case ref of
             Just (off,len) -> do
                 lift $ hSeek h AbsoluteSeek off
-                !block <- lift $ liftM (force . decode) $ BS.hGet h len
+                !block <- lift $
+                    liftM (force . decode . decompress) $ BS.hGet h len
                 next <- respond block
                 loop fh next
             Nothing -> error "corrupted file" -- TODO: throw catchable exception
@@ -179,11 +203,12 @@ writer h raster () = runIdentityP $ do
         
     -- Request all blocks from pipe and write them to file while updating
     -- mutable list of BlockOffsets
-    let loop _ [] = return ()
+    let compress = compressor (options raster)
+        loop _ [] = return ()
         loop !i (ix:ixs) = do
             !block <- request ix
             off <- lift $ liftM fromIntegral $ hTell h
-            lift $ BS.hPut h $ encode block
+            lift $ BS.hPut h $ compress $ encode block
             lift $ Stm.unsafeWrite blockRefs i off
             loop (i+1) ixs
     loop 0 (blockIndexes (nx,ny))
