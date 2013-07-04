@@ -113,20 +113,23 @@ reader h = runIdentityK initialize
         contents <- lift $ BS.hGetContents h
         loop (force $ decode contents) ix
     loop !fh ix = do
-        let ref = getRef fh ix
+        let ref = getOffLen fh ix
         case ref of
-            Just off -> do
-                lift $ hSeek h AbsoluteSeek (fromIntegral off)
-                !block <- lift $ liftM (force . decode) $ BS.hGetContents h
+            Just (off,len) -> do
+                lift $ hSeek h AbsoluteSeek off
+                !block <- lift $ liftM (force . decode) $ BS.hGet h len
                 next <- respond block
                 loop fh next
             Nothing -> error "corrupted file" -- TODO: throw catchable exception
 
-{-# INLINE getRef #-}
-getRef :: FileHeader -> BlockIx -> Maybe BlockOffset
-getRef (FileHeader opts ctx refs) (BlockIx x y)
-    = let nx = fst $ numBlocks ctx opts
-      in refs St.!? (nx*y + x)
+{-# INLINE getOffLen #-}
+getOffLen :: FileHeader -> BlockIx -> Maybe (Integer, Int)
+getOffLen (FileHeader opts ctx refs) (BlockIx x y)
+    = do let nx = fst $ numBlocks ctx opts
+         off  <- refs St.!? (nx*y + x)
+         off' <- refs St.!? (nx*y + x + 1)
+         let len = off' - off
+         return (fromIntegral off, fromIntegral len)
 
 
 withFileS
@@ -159,12 +162,13 @@ writer h raster () = runIdentityP $ do
     -- the first block's offset.
     -- FIXME: Calculate offset without encoding a dummy header
     let header    = FileHeader (options raster) (context raster) dummyRefs
-        dummyRefs = St.replicate (nx*ny) 0
+        dummyRefs = St.replicate nRefs 0
+        nRefs     = nx * ny + 1
         fstBlkOff = fromIntegral . BS.length . encode $ header
         (nx,ny)   = numBlocks (context raster) (options raster)
     
     lift $ hSeek h AbsoluteSeek fstBlkOff
-    blockRefs <- lift $ Stm.new (nx*ny)
+    blockRefs <- lift $ Stm.new nRefs
         
     -- Request all blocks from pipe and write them to file while updating
     -- mutable list of BlockOffsets
@@ -176,6 +180,9 @@ writer h raster () = runIdentityP $ do
             lift $ Stm.unsafeWrite blockRefs i off
             loop (i+1) ixs
     loop 0 (blockIndexes (nx,ny))
+
+    off <- lift $ liftM fromIntegral $ hTell h
+    lift $ Stm.unsafeWrite blockRefs (nRefs-1) off
 
     blockRefs' <- lift $ St.unsafeFreeze blockRefs
     -- Create final header and write it at the beginning of the file
