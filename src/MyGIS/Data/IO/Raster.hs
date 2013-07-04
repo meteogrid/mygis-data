@@ -61,7 +61,7 @@ instance Binary Options where
 
 
 defaultOptions :: Options
-defaultOptions = Opts 0 (256,256)
+defaultOptions = Opts 9 (256,256)
 
 
 type BlockSize = (Int,Int)
