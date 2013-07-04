@@ -6,6 +6,8 @@ module MyGIS.Data.IO.Raster
     Raster (..)
   , Options (..)
 
+  , defaultOptions
+
   , pixelGenerator
   , pointGenerator
   , replicateGenerator
@@ -17,7 +19,8 @@ module MyGIS.Data.IO.Raster
   , (>->)
   , try
 ) where
-import           Codec.Compression.GZip hiding (compress, decompress)
+import           Codec.Compression.GZip hiding (compress, decompress,
+                                                CompressionLevel)
 import           Control.Applicative
 import           Control.DeepSeq
 import           Control.Monad
@@ -34,14 +37,36 @@ import           System.IO
 
 import           MyGIS.Data.Context
 
-type BlockOffset = Int64
-type DataType = Int16
-
 data Raster = Raster {
     options :: Options
   , context :: Context
   , path    :: FilePath
 }
+
+data Options = Opts {
+    compression :: CompressionLevel
+  , blockSize   :: BlockSize
+} deriving Show
+
+instance Binary Options where
+  {-# INLINE put #-}
+  put (Opts c (bx,by))
+    = put c >> put bx >> put by
+  {-# INLINE get #-}
+  get
+    = do c <- get
+         bx <- get
+         by <- get
+         return (Opts c (bx,by))
+
+
+defaultOptions :: Options
+defaultOptions = Opts 0 (256,256)
+
+
+type BlockSize = (Int,Int)
+type CompressionLevel = Int
+
 
 data FileHeader = FileHeader {
     fhVersion :: Version
@@ -50,73 +75,7 @@ data FileHeader = FileHeader {
   , fhOffsets :: !(St.Vector BlockOffset)
 } deriving Show
 
-data Version = Version {
-    vMajor :: !Int8
-  , vMinor :: !Int8
-} deriving Show
-
-version10 :: Version
-version10 = Version 1 0
-
-fileHeader10 :: Options -> Context -> St.Vector BlockOffset -> FileHeader
-fileHeader10 = FileHeader version10
-
-
 instance NFData FileHeader where
-
--- TODO: create smart constructor that verifies compression level and blocksize
-data Options = Opts {
-    compression :: Maybe Int
-  , blockSize   :: (Int,Int)
-} deriving Show
-
-
-compressor :: Options -> BS.ByteString -> BS.ByteString
-compressor opts
-    = case (compression opts) of
-           Nothing  -> id         
-           (Just l) -> compressWith defaultCompressParams {
-                compressLevel = compressionLevel l
-              -- , compressStrategy = huffmanOnlyStrategy
-              }
-
-decompressor :: Options -> BS.ByteString -> BS.ByteString
-decompressor opts
-    = case (compression opts) of
-           Nothing  -> id         
-           (Just _) -> decompressWith defaultDecompressParams
-
-data Block = Block !(St.Vector DataType)
-
-instance NFData Block where
-
-data BlockIx = BlockIx !Int !Int deriving (Eq,Show)
-instance NFData BlockIx where
-
-numBlocks :: Context -> Options -> (Int, Int)
-numBlocks ctx opts = (ceiling (nx/bx), ceiling (ny/by))
-  where nx = fromIntegral . width  . shape     $ ctx  :: Double
-        ny = fromIntegral . height . shape     $ ctx  :: Double
-        bx = fromIntegral . fst    . blockSize $ opts :: Double
-        by = fromIntegral . snd    . blockSize $ opts :: Double
-
-
-
-instance Binary Options where
-  {-# INLINE put #-}
-  put (Opts c (bx,by))
-    = put (enc c) >> put bx >> put by
-    where enc (Just a) = a
-          enc Nothing  = -1
-  {-# INLINE get #-}
-  get
-    = do c <- get
-         let comp = case c of {(-1) -> Nothing; v -> Just v}
-         bx <- get
-         by <- get
-         return (Opts comp (bx,by))
-
-    
 instance Binary FileHeader where
   {-# INLINE put #-}
   put fh
@@ -131,14 +90,44 @@ instance Binary FileHeader where
          FileHeader <$> (pure version) <*> get <*> get <*> get
 
 
+type BlockOffset = Int64
+
+data Version = Version {
+    vMajor :: !Int8
+  , vMinor :: !Int8
+} deriving Show
+
+
+version10 :: Version
+version10 = Version 1 0
+
+fileHeader10 :: Options -> Context -> St.Vector BlockOffset -> FileHeader
+fileHeader10 = FileHeader version10
+
+
+data Block = Block !(St.Vector DataType)
+instance NFData Block where
+
 instance Binary Block where
   {-# INLINE put #-}
   put (Block a) = put a
   {-# INLINE get #-}
   get           = Block <$> get
 
+type DataType = Int16
 
--- | reader is a pipe server that reads blocks from an in-file raster
+
+data BlockIx = BlockIx !Int !Int deriving (Eq,Show)
+instance NFData BlockIx where
+
+
+
+
+
+    
+
+
+-- | reader is a pipe server that reads blocks from a *seekable* file handle
 reader :: (Proxy p)
   => Handle
   -> BlockIx
@@ -152,46 +141,19 @@ reader h = runIdentityK initialize
         loop (force $ decode contents) ix
     loop !fh ix = do
         let ref = getOffLen fh ix
-            decompress = decompressor (fhOptions fh)
-        case ref of
-            Just (off,len) -> do
+            decompress = decompressor $ compression $ fhOptions fh
+        case  
+             ref of
+             Just (off,len) -> do
                 lift $ hSeek h AbsoluteSeek off
                 !block <- lift $
                     liftM (force . decode . decompress) $ BS.hGet h len
                 next <- respond block
                 loop fh next
-            Nothing -> error "corrupted file" -- TODO: throw catchable exception
-
-{-# INLINE getOffLen #-}
-getOffLen :: FileHeader -> BlockIx -> Maybe (Integer, Int)
-getOffLen h (BlockIx x y)
-    = do let nx = fst $ numBlocks (fhContext h) (fhOptions h)
-         off  <- (fhOffsets h) St.!? (nx*y + x)
-         off' <- (fhOffsets h) St.!? (nx*y + x + 1)
-         let len = off' - off
-         return (fromIntegral off, fromIntegral len)
+             Nothing -> error "corrupted file" --TODO: throw catchable exception
 
 
-withFileS
-     :: (Proxy p)
-     => FilePath
-     -> IOMode
-     -> (Handle -> b' -> ExceptionP p a' a b' b SafeIO r)
-     -> b' -> ExceptionP p a' a b' b SafeIO r
-withFileS pth mode p b'
-  = bracket id (openFile pth mode) hClose (\h -> p h b')
-
-readerS :: (CheckP p)
-  => Raster
-  -> BlockIx
-  -> Server (ExceptionP p) BlockIx Block SafeIO ()
-readerS raster
-  = withFileS (path raster) ReadMode (\h -> try . (reader h))
-
-
-blockIndexes :: (Int,Int) -> [BlockIx]
-blockIndexes (bx,by) = [ BlockIx i j | j <- [0..by-1], i <- [0..bx-1]]
-
+-- | writer is a pipe client that writes blocks to a file handle
 writer :: (Proxy p)
   => Handle
   -> Raster
@@ -206,30 +168,69 @@ writer h raster () = runIdentityP $ do
         nRefs     = nx * ny + 1
         fstBlkOff = fromIntegral . BS.length . encode $ header
         (nx,ny)   = numBlocks (context raster) (options raster)
+        compress = compressor (compression $ options raster)
     
-    lift $ hSeek h AbsoluteSeek fstBlkOff
-    blockRefs <- lift $ Stm.new nRefs
-        
     -- Request all blocks from pipe and write them to file while updating
     -- mutable list of BlockOffsets
-    let compress = compressor (options raster)
-        loop _ [] = return ()
-        loop !i (ix:ixs) = do
-            !block <- request ix
-            off <- lift $ liftM fromIntegral $ hTell h
-            lift $ BS.hPut h $ compress $ encode block
-            lift $ Stm.unsafeWrite blockRefs i off
-            loop (i+1) ixs
-    loop 0 (blockIndexes (nx,ny))
+    blockRefs <- lift $ Stm.new nRefs
+    lift $ hSeek h AbsoluteSeek fstBlkOff
+    forM_  (zip [0..] (blockIndexes (nx,ny))) $ \(!i, !ix) -> do
+        !block <- request ix
+        off <- lift $ liftM fromIntegral $ hTell h
+        lift $ BS.hPut h $ compress $ encode block
+        lift $ Stm.unsafeWrite blockRefs i off
 
     off <- lift $ liftM fromIntegral $ hTell h
     lift $ Stm.unsafeWrite blockRefs (nRefs-1) off
-
     blockRefs' <- lift $ St.unsafeFreeze blockRefs
+
     -- Create final header and write it at the beginning of the file
     let finalHeader = fileHeader10 (options raster) (context raster) blockRefs'
     lift $ hSeek h AbsoluteSeek 0
     lift $ BS.hPut h (encode finalHeader)
+
+
+{-# INLINE blockIndexes #-}
+blockIndexes :: (Int,Int) -> [BlockIx]
+blockIndexes (bx,by) = [ BlockIx i j | j <- [0..by-1], i <- [0..bx-1]]
+
+
+{-# INLINE getOffLen #-}
+getOffLen :: FileHeader -> BlockIx -> Maybe (Integer, Int)
+getOffLen h (BlockIx x y)
+    = do let nx = fst $ numBlocks (fhContext h) (fhOptions h)
+         off  <- (fhOffsets h) St.!? (nx*y + x)
+         off' <- (fhOffsets h) St.!? (nx*y + x + 1)
+         let len = off' - off
+         return (fromIntegral off, fromIntegral len)
+
+{-# INLINE numBlocks #-}
+numBlocks :: Context -> Options -> (Int, Int)
+numBlocks ctx opts = (ceiling (nx/bx), ceiling (ny/by))
+  where nx = fromIntegral . width  . shape     $ ctx  :: Double
+        ny = fromIntegral . height . shape     $ ctx  :: Double
+        bx = fromIntegral . fst    . blockSize $ opts :: Double
+        by = fromIntegral . snd    . blockSize $ opts :: Double
+
+
+
+withFileS
+     :: (Proxy p)
+     => FilePath
+     -> IOMode
+     -> (Handle -> b' -> ExceptionP p a' a b' b SafeIO r)
+     -> b' -> ExceptionP p a' a b' b SafeIO r
+withFileS pth mode p b'
+  = bracket id (openFile pth mode) hClose (\h -> p h b')
+
+
+
+readerS :: (CheckP p)
+  => Raster
+  -> BlockIx
+  -> Server (ExceptionP p) BlockIx Block SafeIO ()
+readerS raster
+  = withFileS (path raster) ReadMode (\h -> try . (reader h))
 
 
 
@@ -239,6 +240,8 @@ writerS :: (CheckP p)
   -> Client (ExceptionP p) BlockIx Block SafeIO ()
 writerS raster
   = withFileS (path raster) WriteMode (\h -> try . (writer h raster))
+
+
 
 -- | pixelGenerator is a pipe server that generates blocks with a function
 --   (Pixel -> DataType)
@@ -301,7 +304,28 @@ sink raster () = runIdentityP $ do
         return ()
 
 
+
+
 runSession :: forall r a' b.
      (() -> EitherP SomeException ProxyFast a' () () b SafeIO r)
   -> IO r
 runSession = runSafeIO . runProxy . runEitherK
+
+
+
+
+compressor :: CompressionLevel -> BS.ByteString -> BS.ByteString
+compressor level
+    = case level of
+           0  -> id         
+           l  -> compressWith defaultCompressParams {
+                   compressLevel = compressionLevel l
+                   -- , compressStrategy = huffmanOnlyStrategy
+                   }
+
+decompressor :: CompressionLevel -> BS.ByteString -> BS.ByteString
+decompressor level
+    = case level of
+           0  -> id         
+           _  -> decompressWith defaultDecompressParams
+

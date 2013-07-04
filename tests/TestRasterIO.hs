@@ -44,9 +44,8 @@ write_read_write_and_verify comp = do
     withSystemTempDirectory "test." $ \tmpDir -> do
         let path1   = joinPath [tmpDir, "prueba1.bin"]
             path2   = joinPath [tmpDir, "prueba2.bin"]
-            opts    = Opts comp (256,256)
-            raster  = Raster opts ctx path1
-            raster2 = Raster opts ctx path2
+            raster  = Raster defaultOptions ctx path1
+            raster2 = Raster defaultOptions ctx path2
 
         runSession $
             (try . (pixelGenerator pFunc raster)) >-> writerS raster
@@ -65,8 +64,8 @@ case_compress_makes_smaller_files_for_all_same_value = do
     withSystemTempDirectory "test." $ \tmpDir -> do
         let path1   = joinPath [tmpDir, "uncompressed.bin"]
             path2   = joinPath [tmpDir, "compressed.bin"]
-            opts1    = Opts Nothing (256,256)
-            opts2    = Opts (Just 9) (256,256)
+            opts1   = defaultOptions {compression = 0}
+            opts2   = defaultOptions {compression = 9}
             raster  = Raster opts1 ctx path1
             raster2 = Raster opts2 ctx path2
 
