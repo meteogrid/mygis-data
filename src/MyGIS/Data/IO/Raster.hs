@@ -2,23 +2,26 @@
 {-# LANGUAGE BangPatterns #-}
 
 module MyGIS.Data.IO.Raster
-{-
 (
     Raster (..)
   , Options (..)
 
-  , generatePixel
-  , generatePoint
+  , pixelGenerator
+  , pointGenerator
+  , readerS
+  , writerS
+  , runSession
 
-)
--}
-where
+  , (>->)
+  , try
+) where
 
 import           Control.Applicative ((<$>), (<*>))
 import           Control.Monad (forM_, liftM)
 import           Control.Proxy (Proxy(..), Client, Server, runIdentityK,
-                                runIdentityP, lift)
-import           Control.Proxy.Safe (ExceptionP, CheckP, SafeIO, bracket, try)
+                                runIdentityP, lift, runProxy, (>->))
+import           Control.Proxy.Safe (ExceptionP, CheckP, SafeIO, bracket, try,
+                                     runSafeIO, runEitherK)
 
 import           Data.Binary (Binary(..), decode, encode)
 import           Data.Binary.Put (putWord16host)
@@ -225,3 +228,5 @@ pointGenerator :: (Proxy p, Monad m)
   -> Server p BlockIx Block m ()
 pointGenerator f raster = pixelGenerator f' raster
    where f' = f . (backward (context raster))
+
+runSession = runSafeIO . runProxy . runEitherK

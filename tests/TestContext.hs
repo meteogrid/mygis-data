@@ -9,13 +9,15 @@ module TestContext (tests) where
 import Control.Applicative ((<*>), (<$>), pure, liftA)
 import Data.Monoid (Monoid(mempty))
 import Test.QuickCheck
+import Test.Framework
 import Test.Framework.TH
 import Test.Framework.Providers.QuickCheck2
--- import Test.Framework.Providers.HUnit
--- import Test.HUnit.Base hiding (Test)
 
 import MyGIS.Data.Context
 
+
+tests :: Test.Framework.Test
+tests = $(testGroupGenerator)
 
 instance Arbitrary Envelope where
     arbitrary = do
@@ -112,5 +114,3 @@ prop_union_of_same_env_is_id a = union a a == a
 
 prop_union_with_empty_is_id :: Envelope -> Bool
 prop_union_with_empty_is_id a = union mempty a == a
-
-tests = $(testGroupGenerator)
