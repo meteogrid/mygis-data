@@ -58,13 +58,36 @@ write_read_write_and_verify comp = do
         assertExistsAndSizeGreaterThan path2 (1000*1000*2)
         assertFilesEqual path1 path2
         
+case_compress_makes_smaller_files_for_all_same_value ::  IO()
+case_compress_makes_smaller_files_for_all_same_value = do
+    let Right ctx
+            = mkContext "" (mkEnvelope 0 0 100 100) (mkShape 1000 1000) ""
+    withSystemTempDirectory "test." $ \tmpDir -> do
+        let path1   = joinPath [tmpDir, "uncompressed.bin"]
+            path2   = joinPath [tmpDir, "compressed.bin"]
+            opts1    = Opts Nothing (256,256)
+            opts2    = Opts (Just 9) (256,256)
+            raster  = Raster opts1 ctx path1
+            raster2 = Raster opts2 ctx path2
+
+        runSession $
+            (try . (replicateGenerator 0 raster)) >-> writerS raster
+
+        runSession $
+            readerS raster >-> writerS raster2
+
+        assertExistsAndSizeGreaterThan path2 1
+        compressedSize <- liftM fromJust $ getFileSize path2
+        assertExistsAndSizeGreaterThan path1 compressedSize
 
 assertExistsAndSizeGreaterThan :: FilePath -> Integer -> IO ()
 assertExistsAndSizeGreaterThan p s = do
     size <- getFileSize p
     assertBool ("file " ++ show p ++ " was not created") (isJust size)
-    assertBool ("File size of " ++ show p ++ " is less than " ++ show s)
-               (fromJust size > s)
+    let s2 = fromJust size
+    assertBool ("File size of " ++ show p ++ ", " ++ show s2 ++ " is <= " ++
+                show s)
+               (s2 > s)
     
 
 assertFilesEqual :: FilePath -> FilePath -> IO ()

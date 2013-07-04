@@ -50,10 +50,17 @@ data FileHeader = FileHeader {
   , fhOffsets :: !(St.Vector BlockOffset)
 } deriving Show
 
-data Version = Version !Int8 !Int8 deriving Show
+data Version = Version {
+    vMajor :: !Int8
+  , vMinor :: !Int8
+} deriving Show
 
+version10 :: Version
 version10 = Version 1 0
+
+fileHeader10 :: Options -> Context -> St.Vector BlockOffset -> FileHeader
 fileHeader10 = FileHeader version10
+
 
 instance NFData FileHeader where
 
@@ -70,14 +77,14 @@ compressor opts
            Nothing  -> id         
            (Just l) -> compressWith defaultCompressParams {
                 compressLevel = compressionLevel l
-              , compressStrategy = huffmanOnlyStrategy
+              -- , compressStrategy = huffmanOnlyStrategy
               }
 
 decompressor :: Options -> BS.ByteString -> BS.ByteString
 decompressor opts
     = case (compression opts) of
            Nothing  -> id         
-           (Just l) -> decompressWith defaultDecompressParams
+           (Just _) -> decompressWith defaultDecompressParams
 
 data Block = Block !(St.Vector DataType)
 
@@ -104,9 +111,7 @@ instance Binary Options where
   {-# INLINE get #-}
   get
     = do c <- get
-         let comp = case c of
-                      (-1) -> Nothing
-                      v    -> Just v
+         let comp = case c of {(-1) -> Nothing; v -> Just v}
          bx <- get
          by <- get
          return (Opts comp (bx,by))
@@ -114,8 +119,12 @@ instance Binary Options where
     
 instance Binary FileHeader where
   {-# INLINE put #-}
-  put (FileHeader (Version mj mn) a b c)
-    = put mj >> put mn >> put a >> put b >> put c
+  put fh
+    =  put (vMajor $ fhVersion fh)
+    >> put (vMinor $ fhVersion fh)
+    >> put (fhOptions fh)
+    >> put (fhContext fh)
+    >> put (fhOffsets fh)
   {-# INLINE get #-}
   get
     = do version <- Version <$> get <*> get
@@ -129,7 +138,7 @@ instance Binary Block where
   get           = Block <$> get
 
 
--- | reader is a pipe server that safely reads blocks from an in-file raster
+-- | reader is a pipe server that reads blocks from an in-file raster
 reader :: (Proxy p)
   => Handle
   -> BlockIx
@@ -155,10 +164,10 @@ reader h = runIdentityK initialize
 
 {-# INLINE getOffLen #-}
 getOffLen :: FileHeader -> BlockIx -> Maybe (Integer, Int)
-getOffLen (FileHeader _ opts ctx refs) (BlockIx x y)
-    = do let nx = fst $ numBlocks ctx opts
-         off  <- refs St.!? (nx*y + x)
-         off' <- refs St.!? (nx*y + x + 1)
+getOffLen h (BlockIx x y)
+    = do let nx = fst $ numBlocks (fhContext h) (fhOptions h)
+         off  <- (fhOffsets h) St.!? (nx*y + x)
+         off' <- (fhOffsets h) St.!? (nx*y + x + 1)
          let len = off' - off
          return (fromIntegral off, fromIntegral len)
 
@@ -189,9 +198,9 @@ writer :: (Proxy p)
   -> ()
   -> Client p BlockIx Block IO ()
 writer h raster () = runIdentityP $ do
-    -- Create a dummy healdeocr with the correct number of refs to compute
+    -- Create a dummy header with the correct number of offsets to compute
     -- the first block's offset.
-    -- FIXME: Calculate offset without encoding a dummy header
+    -- FIXME: Calculate first block offset without encoding a dummy header
     let header    = fileHeader10 (options raster) (context raster) dummyRefs
         dummyRefs = St.replicate nRefs 0
         nRefs     = nx * ny + 1
