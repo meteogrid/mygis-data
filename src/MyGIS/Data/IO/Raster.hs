@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE RankNTypes #-}
 
 module MyGIS.Data.IO.Raster
 (
@@ -20,15 +21,10 @@ module MyGIS.Data.IO.Raster
 import           Control.Applicative ((<$>), (<*>))
 import           Control.DeepSeq (force, NFData(..))
 import           Control.Monad (forM_, liftM)
-import           Control.Proxy (Proxy(..), Client, Server, runIdentityK,
-                                runIdentityP, lift, runProxy, (>->))
-import           Control.Proxy.Safe (ExceptionP, CheckP, SafeIO, bracket, try,
-                                     runSafeIO, runEitherK)
-
+import           Control.Proxy
+import           Control.Proxy.Safe
 import           Data.Binary (Binary(..), decode, encode)
-import           Data.Binary.Put (putWord16host)
-import           Data.Binary.Get (getWord16host, Get)
-import           Data.Int (Int64, Int16, Int32)
+import           Data.Int (Int64, Int16)
 import qualified Data.Vector.Storable as St
 import qualified Data.Vector.Storable.Mutable as Stm
 import qualified Data.ByteString.Lazy as BS
@@ -36,8 +32,7 @@ import           Data.Vector.Binary()
 
 import           System.IO
 
-import           MyGIS.Data.Context (Context, Pixel(..), Point, shape, width,
-                                     height, backward)
+import           MyGIS.Data.Context
 
 type BlockOffset = Int64
 type DataType = Int16
@@ -98,28 +93,11 @@ instance Binary FileHeader where
   get                    = FileHeader <$> get <*> get <*> get
 
 
-{-
-Portable entre maquinas con distinto endianness pero 15% mas lento
 instance Binary Block where
   {-# INLINE put #-}
   put (Block a) = put a
   {-# INLINE get #-}
   get           = Block <$> get
--}
-
-instance Binary Block where
-  {-# INLINE put #-}
-  put (Block a)
-    = do let len = fromIntegral . St.length $ a :: Int32
-         put len
-         St.forM_ a (putWord16host . fromIntegral)
-  {-# INLINE get #-}
-  get
-    = do len <- get :: Get Int32
-         data_ <- St.replicateM
-                   (fromIntegral len)
-                   (liftM fromIntegral getWord16host)
-         return $ Block $ force data_
 
 
 -- | reader is a pipe server that safely reads blocks from an in-file raster
@@ -275,5 +253,7 @@ sink raster () = runIdentityP $ do
         return ()
 
 
+runSession :: forall r a' b.
+     (() -> EitherP SomeException ProxyFast a' () () b SafeIO r)
+  -> IO r
 runSession = runSafeIO . runProxy . runEitherK
-
