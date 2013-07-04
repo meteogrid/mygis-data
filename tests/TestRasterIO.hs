@@ -1,6 +1,6 @@
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module TestRasterIO (tests) where
 
@@ -9,8 +9,11 @@ import System.IO.Temp
 import System.FilePath
 import qualified Data.ByteString.Lazy as L
 import Control.Exception hiding (try)
+import Control.Applicative
+import Control.Monad
 
 import Test.QuickCheck
+import Test.Framework
 import Test.Framework.TH
 import Test.Framework.Providers.QuickCheck2
 import Test.Framework.Providers.HUnit
@@ -20,11 +23,13 @@ import MyGIS.Data
 import MyGIS.Data.IO
 
 
+tests :: Test.Framework.Test
 tests = $(testGroupGenerator)
 
 
 
-case_reader_and_writer_can_duplicate_file = do
+case_reader_and_writer_can_duplicate_raster :: IO()
+case_reader_and_writer_can_duplicate_raster = do
     let pFunc (Pixel i j)
             = fromIntegral (i*j)
         Right ctx
@@ -49,24 +54,16 @@ case_reader_and_writer_can_duplicate_file = do
 
 
 assertFilesEqual :: FilePath -> FilePath -> IO ()
-assertFilesEqual a b = do
-    f <- openFile a ReadMode
-    hSetBinaryMode f True
-    f2 <- openFile b ReadMode
-    hSetBinaryMode f2 True
-    c <- L.hGetContents f
-    c2 <- L.hGetContents f2
-    let !ret = all id $ L.zipWith (==) c c2
-    hClose f
-    hClose f2
-    assertBool (show a ++ " is not equal to " ++ show b) ret
-    return ()
+assertFilesEqual a b =
+    withBinaryFile a ReadMode $ \f ->
+        withBinaryFile b ReadMode $ \f2 -> do
+            contents <- liftM2 L.zip (L.hGetContents f) (L.hGetContents f2)
+            assertBool
+                (show a ++ " is not equal to " ++ show b)
+                (all (uncurry (==)) contents)
+
 
 getFileSize :: FilePath -> IO (Maybe Integer)
-getFileSize path = handle handler $ bracket
-    (openFile path ReadMode)
-    (hClose)
-    (\h -> do {size <- hFileSize h; return $ Just size})
-  where
-    handler :: SomeException -> IO (Maybe Integer)
-    handler _ = return Nothing
+getFileSize p
+    = handle (\(_ :: SomeException) -> return Nothing) $
+        withBinaryFile p ReadMode $ \h -> Just <$> hFileSize h
