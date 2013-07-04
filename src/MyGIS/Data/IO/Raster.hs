@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE BangPatterns #-}
 
 module MyGIS.Data.IO.Raster
@@ -8,15 +7,18 @@ module MyGIS.Data.IO.Raster
 
   , pixelGenerator
   , pointGenerator
+  , replicateGenerator
   , readerS
   , writerS
-  , runSession
+  , sink
 
+  , runSession
   , (>->)
   , try
 ) where
 
 import           Control.Applicative ((<$>), (<*>))
+import           Control.DeepSeq (force, NFData(..))
 import           Control.Monad (forM_, liftM)
 import           Control.Proxy (Proxy(..), Client, Server, runIdentityK,
                                 runIdentityP, lift, runProxy, (>->))
@@ -46,7 +48,9 @@ data Raster = Raster {
   , path    :: FilePath
 }
 
-data FileHeader = FileHeader Options Context (St.Vector BlockOffset)
+data FileHeader = FileHeader !Options !Context !(St.Vector BlockOffset)
+
+instance NFData FileHeader where
 
 data Options = Opts {
     compression :: Maybe Int
@@ -56,7 +60,10 @@ data Options = Opts {
 
 data Block = Block !(St.Vector DataType)
 
+instance NFData Block where
+
 data BlockIx = BlockIx !Int !Int deriving (Eq,Show)
+instance NFData BlockIx where
 
 numBlocks :: Context -> Options -> (Int, Int)
 numBlocks ctx opts = (ceiling (nx/bx), ceiling (ny/by))
@@ -93,13 +100,9 @@ instance Binary FileHeader where
 
 {-
 Portable entre maquinas con distinto endianness pero 15% mas lento
-
 instance Binary Block where
   {-# INLINE put #-}
-  put (Block a)
-    = do let len = fromIntegral $ St.length a
-         putWord16host len
-         St.forM_ a (putWord16host . fromIntegral)
+  put (Block a) = put a
   {-# INLINE get #-}
   get           = Block <$> get
 -}
@@ -113,9 +116,10 @@ instance Binary Block where
   {-# INLINE get #-}
   get
     = do len <- get :: Get Int32
-         v <- St.replicateM (fromIntegral len) (liftM fromIntegral getWord16host)
-         return $ Block v
-
+         data_ <- St.replicateM
+                   (fromIntegral len)
+                   (liftM fromIntegral getWord16host)
+         return $ Block $ force data_
 
 
 -- | reader is a pipe server that safely reads blocks from an in-file raster
@@ -129,14 +133,13 @@ reader h = runIdentityK initialize
     initialize ix = do
         lift $ hSetBinaryMode h True
         contents <- lift $ BS.hGetContents h
-        let !fh = decode contents :: FileHeader
-        loop fh ix
-    loop fh ix = do
+        loop (force $ decode contents) ix
+    loop !fh ix = do
         let ref = getRef fh ix
         case ref of
             Just off -> do
                 lift $ hSeek h AbsoluteSeek (fromIntegral off)
-                !block <- lift $ liftM decode $ BS.hGetContents h
+                !block <- lift $ liftM (force . decode) $ BS.hGetContents h
                 next <- respond block
                 loop fh next
             Nothing -> error "corrupted file" -- TODO: throw catchable exception
@@ -181,18 +184,20 @@ writer h raster () = runIdentityP $ do
         dummyRefs = St.replicate (nx*ny) 0
         fstBlkOff = fromIntegral . BS.length . encode $ header
         (nx,ny)   = numBlocks (context raster) (options raster)
-        indexes   = blockIndexes (nx,ny)
     
     lift $ hSeek h AbsoluteSeek fstBlkOff
     blockRefs <- lift $ Stm.new (nx*ny)
         
     -- Request all blocks from pipe and write them to file while updating
     -- mutable list of BlockOffsets
-    forM_ (zip [0..] indexes) $ \(i, !ix) -> do
-        !block <- request ix
-        off <- lift $ liftM fromIntegral $ hTell h
-        lift $ BS.hPut h $ encode block
-        lift $ Stm.unsafeWrite blockRefs i off
+    let loop _ [] = return ()
+        loop !i (ix:ixs) = do
+            !block <- request ix
+            off <- lift $ liftM fromIntegral $ hTell h
+            lift $ BS.hPut h $ encode block
+            lift $ Stm.unsafeWrite blockRefs i off
+            loop (i+1) ixs
+    loop 0 (blockIndexes (nx,ny))
 
     blockRefs' <- lift $ St.unsafeFreeze blockRefs
     -- Create final header and write it at the beginning of the file
@@ -220,14 +225,28 @@ pixelGenerator :: (Proxy p, Monad m)
 pixelGenerator f raster = runIdentityK loop
   where
     loop (BlockIx bx by) = do
-        let (nx,ny) = blockSize . options $ raster
-            x0      = nx * bx
-            y0      = ny * by
+        let (nx,ny)  = blockSize . options $ raster
+            x0       = nx * bx
+            y0       = ny * by
             !data_   = St.generate (nx*ny) $ genPx
             !block   = Block data_
             genPx i = let (!x,!y) = i `divMod` nx
                           !px    = Pixel (x0+x) (y0+y)
                       in f px
+        next <- respond block
+        loop next
+
+replicateGenerator :: (Proxy p, Monad m)
+  => DataType
+  -> Raster
+  -> BlockIx
+  -> Server p BlockIx Block m ()
+replicateGenerator v raster = runIdentityK loop
+  where
+    loop _ = do
+        let (nx,ny)  = blockSize . options $ raster
+            !data_   = St.replicate (nx*ny) v
+            !block   = Block data_
         next <- respond block
         loop next
 
@@ -242,4 +261,19 @@ pointGenerator :: (Proxy p, Monad m)
 pointGenerator f raster = pixelGenerator f' raster
    where f' = f . (backward (context raster))
 
+
+sink :: (Proxy p)
+  => Raster
+  -> ()
+  -> Client p BlockIx Block IO ()
+sink raster () = runIdentityP $ do
+    let (nx,ny)   = numBlocks (context raster) (options raster)
+        indexes   = blockIndexes (nx,ny)
+    
+    forM_ indexes $ \(!ix) -> do
+        !_ <- liftM force $ request ix
+        return ()
+
+
 runSession = runSafeIO . runProxy . runEitherK
+
