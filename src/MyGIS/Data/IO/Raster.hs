@@ -23,15 +23,12 @@ import           Control.Proxy (Proxy(..), Client, Server, runIdentityK,
 import           Control.Proxy.Safe (ExceptionP, CheckP, SafeIO, bracket, try,
                                      runSafeIO, runEitherK)
 
-import           Foreign.Storable (Storable(..))
-import           Foreign (castPtr)
-
 import           Data.Binary (Binary(..), decode, encode)
 import           Data.Binary.Put (putWord16host)
 import           Data.Binary.Get (getWord16host, Get)
-import           Data.IORef (newIORef, readIORef, writeIORef)
 import           Data.Int (Int64, Int16, Int32)
 import qualified Data.Vector.Storable as St
+import qualified Data.Vector.Storable.Mutable as Stm
 import qualified Data.ByteString.Lazy as BS
 import           Data.Vector.Binary()
 
@@ -41,9 +38,7 @@ import           MyGIS.Data.Context (Context, Pixel(..), Point, shape, width,
                                      height, backward)
 
 type BlockOffset = Int64
-type BlockLen = Int64
 type DataType = Int16
-data BlockRef = BlockRef !BlockOffset !BlockLen
 
 data Raster = Raster {
     options :: Options
@@ -51,7 +46,7 @@ data Raster = Raster {
   , path    :: FilePath
 }
 
-data FileHeader = FileHeader Options Context (St.Vector BlockRef)
+data FileHeader = FileHeader Options Context (St.Vector BlockOffset)
 
 data Options = Opts {
     compression :: Maybe Int
@@ -61,7 +56,7 @@ data Options = Opts {
 
 data Block = Block !(St.Vector DataType)
 
-newtype BlockIx = BlockIx (Int,Int) deriving (Eq,Show)
+data BlockIx = BlockIx !Int !Int deriving (Eq,Show)
 
 numBlocks :: Context -> Options -> (Int, Int)
 numBlocks ctx opts = (ceiling (nx/bx), ceiling (ny/by))
@@ -88,12 +83,6 @@ instance Binary Options where
          by <- get
          return (Opts comp (bx,by))
 
-instance Binary BlockRef where
-  {-# INLINE put #-}
-  put (BlockRef a b) = put a >> put b
-  {-# INLINE get #-}
-  get                = BlockRef <$> get <*> get
-
     
 instance Binary FileHeader where
   {-# INLINE put #-}
@@ -107,7 +96,10 @@ Portable entre maquinas con distinto endianness pero 15% mas lento
 
 instance Binary Block where
   {-# INLINE put #-}
-  put (Block a) = put a
+  put (Block a)
+    = do let len = fromIntegral $ St.length a
+         putWord16host len
+         St.forM_ a (putWord16host . fromIntegral)
   {-# INLINE get #-}
   get           = Block <$> get
 -}
@@ -123,20 +115,6 @@ instance Binary Block where
     = do len <- get :: Get Int32
          v <- St.replicateM (fromIntegral len) (liftM fromIntegral getWord16host)
          return $ Block v
-
-instance Storable  BlockRef where
-  sizeOf _    = sizeOf (undefined :: BlockOffset)
-              + sizeOf (undefined :: BlockLen)
-
-  alignment _ = alignment (undefined :: BlockLen)
-
-  {-# INLINE peek #-}
-  peek p = BlockRef <$> peek (castPtr p) <*> peekByteOff (castPtr p) s
-    where s = sizeOf (undefined :: BlockOffset)
-
-  {-# INLINE poke #-}
-  poke p (BlockRef o l) = poke (castPtr p) o >> pokeByteOff (castPtr p) s l
-    where s = sizeOf (undefined :: BlockOffset)
 
 
 
@@ -156,16 +134,16 @@ reader h = runIdentityK initialize
     loop fh ix = do
         let ref = getRef fh ix
         case ref of
-            Just (BlockRef off len) -> do
+            Just off -> do
                 lift $ hSeek h AbsoluteSeek (fromIntegral off)
-                !block <- lift $ liftM decode $ BS.hGet h (fromIntegral len)
+                !block <- lift $ liftM decode $ BS.hGetContents h
                 next <- respond block
                 loop fh next
             Nothing -> error "corrupted file" -- TODO: throw catchable exception
 
 {-# INLINE getRef #-}
-getRef :: FileHeader -> BlockIx -> Maybe BlockRef
-getRef (FileHeader opts ctx refs) (BlockIx (x,y))
+getRef :: FileHeader -> BlockIx -> Maybe BlockOffset
+getRef (FileHeader opts ctx refs) (BlockIx x y)
     = let nx = fst $ numBlocks ctx opts
       in refs St.!? (nx*y + x)
 
@@ -188,7 +166,7 @@ readerS raster
 
 
 blockIndexes :: (Int,Int) -> [BlockIx]
-blockIndexes (bx,by) = [ BlockIx (i,j) | j <- [0..by-1], i <- [0..bx-1]]
+blockIndexes (bx,by) = [ BlockIx i j | j <- [0..by-1], i <- [0..bx-1]]
 
 writer :: (Proxy p)
   => Handle
@@ -197,27 +175,26 @@ writer :: (Proxy p)
   -> Client p BlockIx Block IO ()
 writer h raster () = runIdentityP $ do
     -- Create a dummy healdeocr with the correct number of refs to compute
-    -- the first block's offset
+    -- the first block's offset.
+    -- FIXME: Calculate offset without encoding a dummy header
     let header    = FileHeader (options raster) (context raster) dummyRefs
-        dummyRefs = St.fromList $ replicate (length indexes) (BlockRef 0 0)
+        dummyRefs = St.replicate (nx*ny) 0
         fstBlkOff = fromIntegral . BS.length . encode $ header
-        indexes   = blockIndexes $ numBlocks (context raster) (options raster)
+        (nx,ny)   = numBlocks (context raster) (options raster)
+        indexes   = blockIndexes (nx,ny)
     
     lift $ hSeek h AbsoluteSeek fstBlkOff
-    blockRefs <- lift $ newIORef []
+    blockRefs <- lift $ Stm.new (nx*ny)
         
     -- Request all blocks from pipe and write them to file while updating
-    -- mutable list of BlockRefs
-    forM_ indexes $ \ix -> do
+    -- mutable list of BlockOffsets
+    forM_ (zip [0..] indexes) $ \(i, !ix) -> do
         !block <- request ix
-        let !encoded = encode block
-            len     = fromIntegral . BS.length $ encoded
         off <- lift $ liftM fromIntegral $ hTell h
-        lift $ BS.hPut h encoded
-        bs <- lift $ readIORef blockRefs
-        lift $ writeIORef blockRefs ((BlockRef off len) : bs)
+        lift $ BS.hPut h $ encode block
+        lift $ Stm.unsafeWrite blockRefs i off
 
-    blockRefs' <- lift $ liftM (St.fromList . reverse) $ readIORef blockRefs
+    blockRefs' <- lift $ St.unsafeFreeze blockRefs
     -- Create final header and write it at the beginning of the file
     let finalHeader = FileHeader (options raster) (context raster) blockRefs'
     lift $ hSeek h AbsoluteSeek 0
@@ -242,13 +219,14 @@ pixelGenerator :: (Proxy p, Monad m)
 
 pixelGenerator f raster = runIdentityK loop
   where
-    loop (BlockIx (bx,by)) = do
+    loop (BlockIx bx by) = do
         let (nx,ny) = blockSize . options $ raster
             x0      = nx * bx
             y0      = ny * by
-            !block   = Block $ St.generate (nx*ny) $ genPx
-            genPx i = let (x,y) = i `divMod` nx
-                          px    = Pixel (x0+x) (y0+y)
+            !data_   = St.generate (nx*ny) $ genPx
+            !block   = Block data_
+            genPx i = let (!x,!y) = i `divMod` nx
+                          !px    = Pixel (x0+x) (y0+y)
                       in f px
         next <- respond block
         loop next
