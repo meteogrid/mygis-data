@@ -87,7 +87,7 @@ instance Binary FileHeader where
   {-# INLINE get #-}
   get
     = do version <- Version <$> get <*> get
-         FileHeader <$> (pure version) <*> get <*> get <*> get
+         FileHeader <$> pure version <*> get <*> get <*> get
 
 
 type BlockOffset = Int64

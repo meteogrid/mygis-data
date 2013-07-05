@@ -26,7 +26,7 @@ library
     MyGIS.Data.Type,
     MyGIS.Data.Error,
     MyGIS.Data.Store,
-    MyGIS.Data.Source,
+    MyGIS.Data.Step,
     MyGIS.Data.Context,
     MyGIS.Data.Dimension,
     MyGIS.Data.SpatialReference,
@@ -35,6 +35,9 @@ library
     MyGIS.Data.IO
   
   other-modules:       
+    MyGIS.Data.Store.Raster,
+    MyGIS.Data.Store.Generic,
+    MyGIS.Data.ThirdPartyInstances,
     MyGIS.Data.IO.Raster
   
   -- Other library packages from which modules are imported.

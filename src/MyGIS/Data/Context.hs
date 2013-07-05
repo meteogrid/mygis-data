@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module MyGIS.Data.Context (
     Context
@@ -38,6 +39,7 @@ module MyGIS.Data.Context (
 
 import           Control.Applicative ((<$>), (<*>))
 
+import           Data.Data (Data, Typeable)
 import           Data.Text (Text)
 import           Data.Text.Binary()
 import           Data.Monoid (Monoid(..))
@@ -52,7 +54,7 @@ data Context = Context {
   , envelope :: !Envelope
   , shape    :: !Shape
   , srs      :: !SpatialReference
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Typeable, Data)
 
 instance Binary Context where
   put (Context a b c d) = put a >> put b >> put c >> put d
@@ -69,7 +71,7 @@ data Box a = Box {
   , miny :: !a
   , maxx :: !a
   , maxy :: !a
-} deriving (Eq, Show)
+} deriving (Eq, Show, Typeable, Data)
 
 instance (Ord a, Num a) => Monoid (Box a) where
     mempty = emptyBox
