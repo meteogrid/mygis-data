@@ -29,13 +29,13 @@ tests = $(testGroupGenerator)
 
 case_reader_and_writer_can_duplicate_raster :: IO ()
 case_reader_and_writer_can_duplicate_raster
-    = write_read_write_and_verify Nothing
+    = write_read_write_and_verify 0
 
 case_reader_and_writer_can_duplicate_compressed_raster :: IO ()
 case_reader_and_writer_can_duplicate_compressed_raster
-    = write_read_write_and_verify (Just 9)
+    = write_read_write_and_verify 9
 
-write_read_write_and_verify :: (Maybe Int) ->  IO()
+write_read_write_and_verify :: Int ->  IO()
 write_read_write_and_verify comp = do
     let pFunc (Pixel i j)
             = fromIntegral (i*j)
@@ -44,8 +44,8 @@ write_read_write_and_verify comp = do
     withSystemTempDirectory "test." $ \tmpDir -> do
         let path1   = joinPath [tmpDir, "prueba1.bin"]
             path2   = joinPath [tmpDir, "prueba2.bin"]
-            raster  = Raster defaultOptions ctx path1
-            raster2 = Raster defaultOptions ctx path2
+            raster  = Raster defaultOptions {compression = comp} ctx path1
+            raster2 = Raster defaultOptions {compression = comp} ctx path2
 
         runSession $
             (try . (pixelGenerator pFunc raster)) >-> writerS raster

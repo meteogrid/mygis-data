@@ -1,12 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import Criterion.Main hiding (defaultOptions)
+import Criterion.Config
 import System.IO
 import System.IO.Temp
 import System.FilePath
 
 import MyGIS.Data
 import MyGIS.Data.IO
+
+benchConfig :: Config
+benchConfig = defaultConfig {
+    cfgPerformGC = ljust True
+  , cfgSamples = ljust 5
+  }
+
 
 main :: IO ()
 main = withSystemTempDirectory "bench." $ \tmpDir -> do
@@ -20,7 +28,7 @@ main = withSystemTempDirectory "bench." $ \tmpDir -> do
                     r <-rs ]
       readActs   = [runSession (readerS r  >-> try . (sink r)) | r <-rs ]
           
-  defaultMain (
+  defaultMainWith benchConfig (return ()) (
     [ bench ("Writing comp level: "  ++ show i) (whnfIO act) |
       (i,act) <- zip [0..] writeActs]
       ++
