@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module MyGIS.Data.Context (
@@ -132,18 +131,18 @@ fromSPixel (SubPixel x y) = Pixel (round x) (round y)
 {-# INLINE fromSPixel #-}
 
 width, height :: Num a => Box a -> a
-width  b = (maxx b) - (minx b)
-height b = (maxy b) - (miny b)
-
+width  b = maxx b - minx b
 {-# SPECIALIZE INLINE width :: Envelope -> Double #-}
-{-# SPECIALIZE INLINE height :: Envelope -> Double #-}
 {-# SPECIALIZE INLINE width :: Shape -> Int #-}
+
+height b = maxy b - miny b
+{-# SPECIALIZE INLINE height :: Envelope -> Double #-}
 {-# SPECIALIZE INLINE height :: Shape -> Int #-}
 
 type Shape = Box Int
 
 mkShape :: Int -> Int -> Shape
-mkShape x y = mkBox 0 0 x y
+mkShape = mkBox 0 0
 
 type Envelope = Box Double
 
@@ -153,31 +152,30 @@ mkEnvelope = mkBox
 
 forwardS :: Context -> Point -> SubPixel
 forwardS ctx (Point x y) = SubPixel ln col
-    where col     = (x - (minx e)) * sx
-          ln      = ((maxy e) - y) * sy
+    where col     = (x - minx e) * sx
+          ln      = (maxy e - y) * sy
           (sx,sy) = scale ctx
-          e        = (envelope ctx)
+          e       = envelope ctx
 
 scale :: Context -> (Double, Double)
 scale ctx = (sx,sy)
-  where sx = (fromIntegral (width s)) / width e
-        sy = (fromIntegral (height s)) / height e
+  where sx = fromIntegral (width s) / width e
+        sy = fromIntegral (height s) / height e
         s  = shape ctx
         e  = envelope ctx
 {-# INLINE scale #-}
 
 backwardS :: Context -> SubPixel -> Point
 backwardS ctx (SubPixel ln col) = Point x y
-    where x       = (minx e) + col / sx
-          y       = (maxy e) - ln / sy
+    where x       = minx e + col / sx
+          y       = maxy e - ln / sy
           (sx,sy) = scale ctx
-          e        = (envelope ctx)
+          e       = envelope ctx
 
 forward :: Context -> Point -> Pixel
-forward ctx = fromSPixel . (forwardS ctx)
+forward ctx = fromSPixel . forwardS ctx
+{-# INLINE forward #-}
 
 backward :: Context -> Pixel -> Point
-backward ctx = (backwardS ctx) . toSPixel
-
-{-# INLINE forward #-}
+backward ctx = backwardS ctx . toSPixel
 {-# INLINE backward #-}

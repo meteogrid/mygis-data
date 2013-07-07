@@ -13,7 +13,7 @@ import MyGIS.Data.IO
 benchConfig :: Config
 benchConfig = defaultConfig {
     cfgPerformGC = ljust True
-  , cfgSamples = ljust 5
+  , cfgSamples = ljust 1
   }
 
 

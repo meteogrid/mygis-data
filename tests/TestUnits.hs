@@ -5,6 +5,7 @@
 
 module TestUnits (tests) where
 
+import Control.Applicative (liftA)
 import Data.Vector.Unboxed as V
 import Prelude as P
 import Test.Framework
@@ -19,9 +20,7 @@ tests :: Test.Framework.Test
 tests = $(testGroupGenerator)
 
 instance Arbitrary (Length Double) where
-    arbitrary = do
-        x <- arbitrary
-        return (x *~ meter)
+    arbitrary = liftA (*~ meter) arbitrary
 
 prop_can_operate_on_quantity_unboxed_vectors ::
   Length Double -> [Length Double] -> Bool

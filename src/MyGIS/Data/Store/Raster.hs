@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs #-}
 
 module MyGIS.Data.Store.Raster (
@@ -28,7 +27,7 @@ data RasterStore d u = RasterStore {
 
 instance (IsUnit u, IsDimension d) => IsStore RasterStore d u where
     type Src RasterStore d u = RasterSource (RasterStore d u) (DimIx d)
-    getSource rs ix          = RasterSource rs ix
+    getSource                = RasterSource
     dimension                = rsDim
     name                     = rsName
     context                  = rsContext
