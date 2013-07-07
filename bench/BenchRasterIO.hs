@@ -2,6 +2,7 @@
 
 import Criterion.Main hiding (defaultOptions)
 import Criterion.Config
+import Data.Int
 import System.IO
 import System.IO.Temp
 import System.FilePath
@@ -20,6 +21,7 @@ main :: IO ()
 main = withSystemTempDirectory "bench." $ \tmpDir -> do
   let tP f       = joinPath [tmpDir, f]
       Right c    = mkContext "" (mkEnvelope 0 0 1 1) (mkShape 3000 3000) ""
+      rs :: [Raster Int16]
       rs         = [ Raster defaultOptions {compression=i} c (tP ("r"++show i)) |
                      i <- [0..9] ] 
       pFunc (Pixel i j)

@@ -32,12 +32,11 @@ import qualified Data.Vector.Storable as St
 import qualified Data.Vector.Storable.Mutable as Stm
 import qualified Data.ByteString.Lazy as BS
 import           Data.Vector.Binary()
-
 import           System.IO
 
 import           MyGIS.Data.Context
 
-data Raster = Raster {
+data Raster a = Raster {
     options :: Options
   , context :: Context
   , path    :: FilePath
@@ -105,16 +104,21 @@ fileHeader10 :: Options -> Context -> St.Vector BlockOffset -> FileHeader
 fileHeader10 = FileHeader version10
 
 
-data Block = Block !(St.Vector DataType)
-instance NFData Block where
+data Block a = Block !(St.Vector a)
+instance NFData (Block a) where
 
-instance Binary Block where
-  {-# INLINE put #-}
+class (Binary a, Stm.Storable a) => BlockData a where
+
+instance BlockData Int8
+instance BlockData Int16
+instance BlockData Int32
+instance BlockData Int
+
+instance BlockData a => Binary (Block a) where
+  {-# SPECIALISE INLINE put :: Block Int16 -> Put #-}
   put (Block a) = put a
-  {-# INLINE get #-}
+  {-# SPECIALISE INLINE get :: Get (Block Int16) #-}
   get           = Block <$> get
-
-type DataType = Int16
 
 
 data BlockIx = BlockIx !Int !Int deriving (Eq,Show)
@@ -128,11 +132,10 @@ instance NFData BlockIx where
 
 
 -- | reader is a pipe server that reads blocks from a *seekable* file handle
-reader :: (Proxy p)
+reader :: (Proxy p, BlockData a)
   => Handle
   -> BlockIx
-  -> Server p BlockIx Block IO ()
-
+  -> Server p BlockIx (Block a) IO ()
 reader h = runIdentityK initialize
   where
     initialize ix = do
@@ -151,14 +154,16 @@ reader h = runIdentityK initialize
                 next <- respond block
                 loop fh next
              Nothing -> error "corrupted file" --TODO: throw catchable exception
+{-# SPECIALISE INLINE reader :: (Proxy p) =>
+       Handle -> BlockIx -> Server p BlockIx (Block Int16) IO () #-}
 
 
 -- | writer is a pipe client that writes blocks to a file handle
-writer :: (Proxy p)
+writer :: (Proxy p, BlockData a)
   => Handle
-  -> Raster
+  -> Raster a
   -> ()
-  -> Client p BlockIx Block IO ()
+  -> Client p BlockIx (Block a) IO ()
 writer h raster () = runIdentityP $ do
     -- Create a dummy header with the correct number of offsets to compute
     -- the first block's offset.
@@ -188,6 +193,9 @@ writer h raster () = runIdentityP $ do
     let finalHeader = fileHeader10 (options raster) (context raster) blockRefs'
     lift $ hSeek h AbsoluteSeek 0
     lift $ BS.hPut h (encode finalHeader)
+
+{-# SPECIALISE INLINE writer :: (Proxy p) =>
+       Handle -> Raster Int16 -> () -> Client p BlockIx (Block Int16) IO () #-}
 
 
 {-# INLINE blockIndexes #-}
@@ -225,31 +233,37 @@ withFileS pth mode p b'
 
 
 
-readerS :: (CheckP p)
-  => Raster
+readerS :: (CheckP p, BlockData a)
+  => Raster a
   -> BlockIx
-  -> Server (ExceptionP p) BlockIx Block SafeIO ()
+  -> Server (ExceptionP p) BlockIx (Block a) SafeIO ()
 readerS raster
   = withFileS (path raster) ReadMode (\h -> try . (reader h))
 
+{-# SPECIALISE readerS :: CheckP p =>
+       Raster Int16 -> BlockIx -> 
+       Server (ExceptionP p) BlockIx (Block Int16) SafeIO () #-}
 
 
-writerS :: (CheckP p)
-  => Raster
+writerS :: (CheckP p, BlockData a)
+  => Raster a
   -> ()
-  -> Client (ExceptionP p) BlockIx Block SafeIO ()
+  -> Client (ExceptionP p) BlockIx (Block a) SafeIO ()
 writerS raster
   = withFileS (path raster) WriteMode (\h -> try . (writer h raster))
 
+{-# SPECIALISE writerS :: CheckP p =>
+       Raster Int16 -> () -> 
+       Client (ExceptionP p) BlockIx (Block Int16) SafeIO () #-}
 
 
 -- | pixelGenerator is a pipe server that generates blocks with a function
---   (Pixel -> DataType)
-pixelGenerator :: (Proxy p, Monad m)
-  => (Pixel->DataType)
-  -> Raster
+--   (Pixel -> a)
+pixelGenerator :: (Proxy p, Monad m, BlockData a)
+  => (Pixel->a)
+  -> Raster a
   -> BlockIx
-  -> Server p BlockIx Block m ()
+  -> Server p BlockIx (Block a) m ()
 
 pixelGenerator f raster = runIdentityK loop
   where
@@ -265,11 +279,11 @@ pixelGenerator f raster = runIdentityK loop
         next <- respond block
         loop next
 
-replicateGenerator :: (Proxy p, Monad m)
-  => DataType
-  -> Raster
+replicateGenerator :: (Proxy p, Monad m, BlockData a)
+  => a
+  -> Raster a
   -> BlockIx
-  -> Server p BlockIx Block m ()
+  -> Server p BlockIx (Block a) m ()
 replicateGenerator v raster = runIdentityK loop
   where
     loop _ = do
@@ -282,19 +296,19 @@ replicateGenerator v raster = runIdentityK loop
 
 -- | pointGenerator is a pipe server that generates blocks with a function
 --   (Point -> DataType)
-pointGenerator :: (Proxy p, Monad m)
-  => (Point->DataType)
-  -> Raster
+pointGenerator :: (Proxy p, Monad m, BlockData a)
+  => (Point->a)
+  -> Raster a
   -> BlockIx
-  -> Server p BlockIx Block m ()
+  -> Server p BlockIx (Block a) m ()
 pointGenerator f raster = pixelGenerator f' raster
    where f' = f . (backward (context raster))
 
 
 sink :: (Proxy p)
-  => Raster
+  => Raster a
   -> ()
-  -> Client p BlockIx Block IO ()
+  -> Client p BlockIx (Block a) IO ()
 sink raster () = runIdentityP $ do
     let (nx,ny)   = numBlocks (context raster) (options raster)
         indexes   = blockIndexes (nx,ny)

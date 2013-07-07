@@ -11,7 +11,7 @@ module MyGIS.Data.Store.Raster (
 
 import           Data.Typeable
 import           Data.Data
-import           Data.Vector.Unboxed as V
+--import           Data.Vector.Unboxed as V
 import           Data.Text (Text)
 import           MyGIS.Data.Context
 import           MyGIS.Data.Dimension
@@ -37,12 +37,13 @@ instance (IsUnit u, IsDimension d) => IsStore RasterStore d u where
 data RasterSource s ix = RasterSource s ix
   deriving (Eq, Show)
 
+{-
 data RasterView u = RasterView {
     vContext :: Context
-  , vUnits   :: u
-  , vData    :: V.Vector Double
+  , vData    :: V.Vector u
 } deriving (Eq, Show)
 
 
 getView :: RasterSource s ix -> Context -> m (RasterView)
 getView = undefined
+-}

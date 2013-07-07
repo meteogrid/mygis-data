@@ -61,7 +61,7 @@ library
     temporary                 >= 1.1       && < 1.2,
     zlib                      >= 0.5.4     && < 0.6
 
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -fllvm -optlo-O3 -O2
+  ghc-options: -Wall -Werror -fwarn-tabs -funbox-strict-fields -fllvm -optlo-O3 -O2
 
 test-suite Main
   type:            exitcode-stdio-1.0

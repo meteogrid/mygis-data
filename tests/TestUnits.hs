@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-} 
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -28,4 +29,5 @@ prop_can_operate_on_quantity_unboxed_vectors v vs =
     (V.toList . V.map fn . V.fromList)  vs  ==
     P.map fn vs
   where
+    fn :: Length Double -> Area Double
     fn = (U.*) v
