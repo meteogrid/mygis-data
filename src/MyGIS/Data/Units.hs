@@ -32,7 +32,7 @@ class (Data u, Show u, Eq u) => IsUnit u
 instance Show (Unit DLength a) where show _ = "length (meter)"
 instance (Data a, Show a, Eq a) => IsUnit (Unit DLength a) where
 deriving instance Vector U.Vector a   => (Vector U.Vector) (Length a)
-deriving instance MVector (U.MVector a) => (MVector U.MVector) (Length a)
+deriving instance MVector U.MVector a => (MVector U.MVector) (Length a)
 deriving instance U.Unbox a           => U.Unbox (Length a)
 
 instance Show (Unit DArea a) where show _ = "area (meter^2)"

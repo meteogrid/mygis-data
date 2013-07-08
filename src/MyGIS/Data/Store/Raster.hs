@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs #-}
 
 module MyGIS.Data.Store.Raster (
@@ -18,12 +19,18 @@ import           MyGIS.Data.Units (IsUnit)
 import           MyGIS.Data.Store.Generic
 
 
-data RasterStore d u = RasterStore {
-    rsUnits   :: u
-  , rsDim     :: d
-  , rsName    :: Text
-  , rsContext :: Context
-} deriving (Eq, Show, Typeable, Data)
+data RasterStore d u where {
+    RasterStore :: (IsUnit u, IsDimension d) => {
+        rsUnits   :: u
+      , rsDim     :: d
+      , rsName    :: Text
+      , rsContext :: Context
+      } -> RasterStore d u
+}
+deriving instance Eq (RasterStore d u)
+deriving instance Show (RasterStore d u)
+deriving instance Typeable2 RasterStore
+deriving instance (IsDimension d, IsUnit u) => Data (RasterStore d u)
 
 instance (IsUnit u, IsDimension d) => IsStore RasterStore d u where
     type Src RasterStore d u = RasterSource (RasterStore d u) (DimIx d)

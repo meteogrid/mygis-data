@@ -262,7 +262,6 @@ pixelGenerator :: (Proxy p, Monad m, BlockData a)
   -> Raster a
   -> BlockIx
   -> Server p BlockIx (Block a) m ()
-
 pixelGenerator f raster = runIdentityK loop
   where
     loop (BlockIx bx by) = do
