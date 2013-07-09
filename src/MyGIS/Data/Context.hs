@@ -22,7 +22,6 @@ module MyGIS.Data.Context (
   , width
   , height
 
-  , cid
   , srs
   , envelope
   , shape
@@ -39,8 +38,6 @@ module MyGIS.Data.Context (
 import           Control.Applicative ((<$>), (<*>))
 
 import           Data.Data (Data, Typeable)
-import           Data.Text (Text)
-import           Data.Text.Binary()
 import           Data.Monoid (Monoid(..))
 import           Data.Binary (Binary(..))
 
@@ -49,21 +46,20 @@ import           MyGIS.Data.Error (mkError, EitherError)
 
 
 data Context = Context {    
-    cid      :: !Text
-  , envelope :: !Envelope
+    envelope :: !Envelope
   , shape    :: !Shape
   , srs      :: !SpatialReference
   } deriving (Eq, Show, Typeable, Data)
 
 instance Binary Context where
-  put (Context a b c d) = put a >> put b >> put c >> put d
-  get                   = Context <$> get <*> get <*> get <*> get
+  put (Context a b c) = put a >> put b >> put c
+  get                 = Context <$> get <*> get <*> get
 
 mkContext ::
-  Text -> Envelope -> Shape -> SpatialReference -> EitherError Context
-mkContext i e s sr
+  Envelope -> Shape -> SpatialReference -> EitherError Context
+mkContext e s sr
     | isEmpty e || isEmpty s = mkError "mkContext: empty shape or envelope"
-    | otherwise              = Right $ Context i e s sr
+    | otherwise              = Right $ Context e s sr
 
 data Box a = Box {
     minx :: !a
