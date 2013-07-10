@@ -1,5 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module MyGIS.Data.IO.Raster
 (
@@ -27,12 +29,15 @@ import           Control.Monad
 import           Control.Proxy
 import           Control.Proxy.Safe
 import           Data.Binary
+import           Data.Binary.Get (getWord16host, getWord32host)
+import           Data.Binary.Put (putWord16host, putWord32host)
 import           Data.Int
 import qualified Data.Vector.Storable as St
 import qualified Data.Vector.Storable.Mutable as Stm
 import qualified Data.ByteString.Lazy as BS
 import           Data.Vector.Binary()
 import           System.IO
+import           System.IO.Unsafe (unsafePerformIO)
 
 import           MyGIS.Data.Context
 
@@ -113,11 +118,36 @@ instance BlockData Int16
 instance BlockData Int32
 instance BlockData Int
 
+instance Binary (Block Int16) where
+  {-# INLINE put #-}
+  put (Block a) =  putWord32host ((fromIntegral . St.length) a)
+                >> St.forM_ a (putWord16host.fromIntegral)
+  {-# INLINE get #-}
+  get = do
+      n <- liftM fromIntegral getWord32host
+      -- new unitinialized array
+      mv <- (return . unsafePerformIO) $ Stm.new n
+      let fill !i
+              | i < n = do
+                  x <- liftM fromIntegral getWord16host
+                  (unsafePerformIO $ Stm.unsafeWrite mv i x) `seq` return ()
+                  fill (i+1)
+
+              | otherwise = return ()
+      fill 0
+      !data_ <- (return . unsafePerformIO) $ St.unsafeFreeze mv
+      return $ Block data_
+
+
+{-
 instance BlockData a => Binary (Block a) where
-  {-# SPECIALISE INLINE put :: Block Int16 -> Put #-}
-  put (Block a) = put a
-  {-# SPECIALISE INLINE get :: Get (Block Int16) #-}
-  get           = liftA Block get
+  {-# INLINE put #-}
+  put (Block a) = put (St.length a) >> St.forM_ a put
+  {-# INLINE get #-}
+  get           = do len <- get
+                     vec <- St.replicateM len get
+                     return $ Block vec
+-}
 
 
 data BlockIx = BlockIx !Int !Int deriving (Eq,Show)
@@ -131,7 +161,7 @@ instance NFData BlockIx where
 
 
 -- | reader is a pipe server that reads blocks from a *seekable* file handle
-reader :: (Proxy p, BlockData a)
+reader :: (Proxy p, BlockData a, Binary (Block a))
   => Handle
   -> BlockIx
   -> Server p BlockIx (Block a) IO ()
@@ -157,7 +187,7 @@ reader h = runIdentityK initialize
 
 
 -- | writer is a pipe client that writes blocks to a file handle
-writer :: (Proxy p, BlockData a)
+writer :: (Proxy p, BlockData a, Binary (Block a))
   => Handle
   -> Raster a
   -> ()
@@ -171,20 +201,17 @@ writer h raster () = runIdentityP $ do
         nRefs     = nx * ny + 1
         fstBlkOff = fromIntegral . BS.length . encode $ header
         (nx,ny)   = numBlocks (context raster) (options raster)
-        compress = compressor (compression $ options raster)
+        compress  = compressor (compression $ options raster)
     
     -- Request all blocks from pipe and write them to file while updating
     -- mutable list of BlockOffsets
     blockRefs <- lift $ Stm.new nRefs
     lift $ hSeek h AbsoluteSeek fstBlkOff
     forM_  (zip [0..] (blockIndexes (nx,ny))) $ \(!i, !ix) -> do
-        !block <- request ix
-        off <- lift $ liftM fromIntegral $ hTell h
-        lift $ BS.hPut h $ compress $ encode block
-        lift $ Stm.unsafeWrite blockRefs i off
+        lift $ liftM fromIntegral (hTell h) >>= Stm.unsafeWrite blockRefs i
+        request ix >>= lift . BS.hPut h . compress . encode
 
-    off <- lift $ liftM fromIntegral $ hTell h
-    lift $ Stm.unsafeWrite blockRefs (nRefs-1) off
+    lift $ liftM fromIntegral (hTell h) >>= Stm.unsafeWrite blockRefs (nRefs-1)
     blockRefs' <- lift $ St.unsafeFreeze blockRefs
 
     -- Create final header and write it at the beginning of the file
@@ -231,7 +258,7 @@ withFileS pth mode p b'
 
 
 
-readerS :: (CheckP p, BlockData a)
+readerS :: (CheckP p, BlockData a, Binary (Block a))
   => Raster a
   -> BlockIx
   -> Server (ExceptionP p) BlockIx (Block a) SafeIO ()
@@ -243,7 +270,7 @@ readerS raster
        Server (ExceptionP p) BlockIx (Block Int16) SafeIO () #-}
 
 
-writerS :: (CheckP p, BlockData a)
+writerS :: (CheckP p, BlockData a, Binary (Block a))
   => Raster a
   -> ()
   -> Client (ExceptionP p) BlockIx (Block a) SafeIO ()
@@ -264,17 +291,20 @@ pixelGenerator :: (Proxy p, Monad m, BlockData a)
   -> Server p BlockIx (Block a) m ()
 pixelGenerator f raster = runIdentityK loop
   where
-    loop (BlockIx bx by) = do
-        let (nx,ny)  = blockSize . options $ raster
-            x0       = nx * bx
-            y0       = ny * by
-            !data_   = St.generate (nx*ny) genPx
-            !block   = Block data_
-            genPx i = let (!x,!y) = i `divMod` nx
-                          !px    = Pixel (x0+x) (y0+y)
-                      in f px
-        next <- respond block
-        loop next
+    (!nx,!ny)             = blockSize . options $ raster
+    loop (BlockIx bx by) = respond block >>= loop
+      where !block   = Block data_
+            data_    = St.generate (nx*ny) genPx
+            genPx i  = let (!x,!y) = i `divMod` nx
+                       in f $ Pixel (x0+x) (y0+y)
+            {-# INLINE [0] genPx #-}
+            !x0      = nx * bx
+            !y0      = ny * by
+{-# SPECIALISE pixelGenerator :: (Proxy p, Monad m)
+  => (Pixel->Int16)
+  -> Raster Int16
+  -> BlockIx
+  -> Server p BlockIx (Block Int16) m () #-}
 
 replicateGenerator :: (Proxy p, Monad m, BlockData a)
   => a
@@ -283,12 +313,10 @@ replicateGenerator :: (Proxy p, Monad m, BlockData a)
   -> Server p BlockIx (Block a) m ()
 replicateGenerator v raster = runIdentityK loop
   where
-    loop _ = do
-        let (nx,ny)  = blockSize . options $ raster
-            !data_   = St.replicate (nx*ny) v
-            !block   = Block data_
-        next <- respond block
-        loop next
+    (nx,ny)  = blockSize . options $ raster
+    loop _   = respond block >>= loop
+      where !data_ = St.replicate (nx*ny) v
+            block  = Block data_
 
 
 -- | pointGenerator is a pipe server that generates blocks with a function
