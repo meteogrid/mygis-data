@@ -170,21 +170,16 @@ reader h = runIdentityK initialize
     initialize ix = do
         lift $ hSetBinaryMode h True
         contents <- lift $ BS.hGetContents h
-        loop (force $ decode contents) ix
-    loop !fh ix = do
-        let ref = getOffLen fh ix
-            decompress = decompressor $ compression $ fhOptions fh
-        case ref of
-             Just (off,len) -> do
-                lift $ hSeek h AbsoluteSeek off
-                !block <- lift $
-                    liftM (force . decode . decompress) $ BS.hGet h len
-                next <- respond block
-                loop fh next
-             Nothing -> error "corrupted file" --TODO: throw catchable exception
+        let header = (force $ decode contents)
+            decompress = decompressor $ compression $ fhOptions header
+        loop header decompress ix
+    loop fh c !ix =
+        case getOffLen fh ix of
+             Just (off,len) -> lift (readBlock h c off len)
+                               >>= respond >>= loop fh c
+             Nothing        -> error "corrupted file"
 {-# SPECIALISE INLINE reader :: (Proxy p) =>
        Handle -> BlockIx -> Server p BlockIx (Block Int16) IO () #-}
-
 
 -- | writer is a pipe client that writes blocks to a file handle
 writer :: (Proxy p, BlockData a, Binary (Block a))
@@ -209,7 +204,7 @@ writer h raster () = runIdentityP $ do
     lift $ hSeek h AbsoluteSeek fstBlkOff
     forM_  (zip [0..] (blockIndexes (nx,ny))) $ \(!i, !ix) -> do
         lift $ liftM fromIntegral (hTell h) >>= Stm.unsafeWrite blockRefs i
-        request ix >>= lift . BS.hPut h . compress . encode
+        request ix >>= \b -> lift $ writeBlock h compress b
 
     lift $ liftM fromIntegral (hTell h) >>= Stm.unsafeWrite blockRefs (nRefs-1)
     blockRefs' <- lift $ St.unsafeFreeze blockRefs
@@ -223,12 +218,11 @@ writer h raster () = runIdentityP $ do
        Handle -> Raster Int16 -> () -> Client p BlockIx (Block Int16) IO () #-}
 
 
-{-# INLINE blockIndexes #-}
 blockIndexes :: (Int,Int) -> [BlockIx]
 blockIndexes (bx,by) = [ BlockIx i j | j <- [0..by-1], i <- [0..bx-1]]
+{-# INLINE blockIndexes #-}
 
 
-{-# INLINE getOffLen #-}
 getOffLen :: FileHeader -> BlockIx -> Maybe (Integer, Int)
 getOffLen h (BlockIx x y)
     = do let nx = fst $ numBlocks (fhContext h) (fhOptions h)
@@ -236,15 +230,27 @@ getOffLen h (BlockIx x y)
          off' <- fhOffsets h St.!? (nx*y + x + 1)
          let len = off' - off
          return (fromIntegral off, fromIntegral len)
+{-# INLINE getOffLen #-}
 
-{-# INLINE numBlocks #-}
 numBlocks :: Context -> Options -> (Int, Int)
 numBlocks ctx opts = (ceiling (nx/bx), ceiling (ny/by))
   where nx = fromIntegral . width  . shape     $ ctx  :: Double
         ny = fromIntegral . height . shape     $ ctx  :: Double
         bx = fromIntegral . fst    . blockSize $ opts :: Double
         by = fromIntegral . snd    . blockSize $ opts :: Double
+{-# INLINE numBlocks #-}
 
+
+writeBlock :: Binary (Block a) => Handle -> Codec -> Block a -> IO ()
+writeBlock h codec = BS.hPut h . codec . encode
+{-# SPECIALISE INLINE writeBlock :: Handle -> Codec -> Block Int16 -> IO () #-}
+
+readBlock :: Binary (Block a) => Handle -> Codec -> Integer -> Int -> IO (Block a)
+readBlock h codec off len
+    = do hSeek h AbsoluteSeek off
+         liftM (decode . codec) (BS.hGet h len)
+{-# SPECIALISE INLINE readBlock ::
+    Handle -> Codec -> Integer -> Int -> IO (Block Int16) #-}
 
 
 withFileS
@@ -315,8 +321,8 @@ replicateGenerator v raster = runIdentityK loop
   where
     (nx,ny)  = blockSize . options $ raster
     loop _   = respond block >>= loop
-      where !data_ = St.replicate (nx*ny) v
-            block  = Block data_
+      where data_ = St.replicate (nx*ny) v
+            block = Block data_
 
 
 -- | pointGenerator is a pipe server that generates blocks with a function
@@ -334,8 +340,11 @@ sink :: (Proxy p)
   => Raster a
   -> ()
   -> Client p BlockIx (Block a) IO ()
-sink raster () = runIdentityP $ forM_ (blockIndexes nbs) request
+sink raster ()
+    = runIdentityP $ mapM_ requestBlock ixs
   where nbs = numBlocks (context raster) (options raster)
+        ixs = blockIndexes nbs
+        requestBlock i = request i >>= (\b -> force b `seq` return ())
     
 
 
@@ -348,8 +357,9 @@ runSession = runSafeIO . runProxy . runEitherK
 
 
 
+type Codec = BS.ByteString -> BS.ByteString
 
-compressor :: CompressionLevel -> BS.ByteString -> BS.ByteString
+compressor :: CompressionLevel -> Codec
 compressor level
     = case level of
            0  -> id         
@@ -358,7 +368,7 @@ compressor level
                    -- , compressStrategy = huffmanOnlyStrategy
                    }
 
-decompressor :: CompressionLevel -> BS.ByteString -> BS.ByteString
+decompressor :: CompressionLevel -> Codec
 decompressor level
     = case level of
            0  -> id         
