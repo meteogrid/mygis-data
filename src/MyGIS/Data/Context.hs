@@ -37,7 +37,7 @@ module MyGIS.Data.Context (
 
 import           Control.Applicative ((<$>), (<*>))
 
-import           Data.Data (Data, Typeable)
+import           Data.Typeable (Typeable)
 import           Data.Monoid (Monoid(..))
 import           Data.Binary (Binary(..))
 
@@ -49,7 +49,7 @@ data Context = Context {
     envelope :: !Envelope
   , shape    :: !Shape
   , srs      :: !SpatialReference
-  } deriving (Eq, Show, Typeable, Data)
+  } deriving (Eq, Show, Typeable)
 
 instance Binary Context where
   put (Context a b c) = put a >> put b >> put c
@@ -66,7 +66,7 @@ data Box a = Box {
   , miny :: !a
   , maxx :: !a
   , maxy :: !a
-} deriving (Eq, Show, Typeable, Data)
+} deriving (Eq, Show, Typeable)
 
 instance (Ord a, Num a) => Monoid (Box a) where
     mempty = emptyBox

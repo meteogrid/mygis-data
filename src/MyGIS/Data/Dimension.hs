@@ -14,14 +14,14 @@ module MyGIS.Data.Dimension (
   , ForecastTimeIx (..) 
 ) where
 
-import           Data.Data (Data, Typeable)
+import           Data.Typeable (Typeable)
 import           Data.Text hiding (map)
 
 import MyGIS.Data.Time
 import MyGIS.Data.ThirdPartyInstances()
 
 
-class (Show d, Data d, Eq d, IsDimensionIx (DimIx d)) => IsDimension d where
+class (Show d, Typeable d, Eq d, IsDimensionIx (DimIx d)) => IsDimension d where
     type DimIx d :: *
     nextIx         :: d -> DimIx d -> DimIx d
     prevIx         :: d -> DimIx d -> DimIx d
@@ -39,12 +39,12 @@ class (Show d, Data d, Eq d, IsDimensionIx (DimIx d)) => IsDimension d where
               cond  = if from < to then (<=) else (>=)
 
 data ObservationTimeDimension = ObservationTimeDimension CronSchedule
-  deriving (Show, Eq, Typeable, Data)
+  deriving (Show, Eq, Typeable)
 
 
 
 data ForecastTimeDimension = ForecastTimeDimension CronSchedule [Horizon]
-  deriving (Show, Eq, Typeable, Data)
+  deriving (Show, Eq, Typeable)
 
 
 instance IsDimension ObservationTimeDimension  where
@@ -66,19 +66,19 @@ instance IsDimension ForecastTimeDimension where
 
 type IsDimensionIxKey = [Text]
 
-class (Show ix, Data ix, Ord ix, Eq ix) => IsDimensionIx ix where
+class (Show ix, Typeable ix, Ord ix, Eq ix) => IsDimensionIx ix where
     ixKey          :: ix -> IsDimensionIxKey
 
 
 
 data ObservationTimeIx = ObservationTimeIx Time
-  deriving (Eq, Ord, Show, Typeable, Data)
+  deriving (Eq, Ord, Show, Typeable)
 
 instance IsDimensionIx ObservationTimeIx where
     ixKey (ObservationTimeIx t) = map pack [show t]
 
 data ForecastTimeIx = ForecastTimeIx Time Horizon
-  deriving (Eq, Ord, Show, Typeable, Data)
+  deriving (Eq, Ord, Show, Typeable)
 
 instance IsDimensionIx ForecastTimeIx where
     ixKey (ForecastTimeIx t h) = map pack [show t, show h]

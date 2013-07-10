@@ -12,7 +12,7 @@ module MyGIS.Data.Time (
   , addHorizon
 ) where
 
-import           Data.Data (Data, Typeable)
+import           Data.Typeable (Typeable)
 import           Data.Time.Calendar ( Day(ModifiedJulianDay) )
 import           Data.Time.Clock ( UTCTime(UTCTime), secondsToDiffTime,
                                   addUTCTime, diffUTCTime, NominalDiffTime )
@@ -25,7 +25,7 @@ import           System.Locale (defaultTimeLocale)
 import qualified Data.Time.Format as T
 import           MyGIS.Data.Error (EitherError, mapE, mkError)
 
-newtype Time = Time {toUTCTime :: UTCTime} deriving (Eq, Ord, Typeable, Data)
+newtype Time = Time {toUTCTime :: UTCTime} deriving (Eq, Ord, Typeable)
 
 instance Show Time where show = formatTime iso8601
 
@@ -60,7 +60,7 @@ secondsToNominalDiffTime s | s >= 0    = diffUTCTime b a
 
 
 newtype Horizon = Minutes {minutes :: Int}
-  deriving (Eq, Ord, Show, Typeable, Data)
+  deriving (Eq, Ord, Show, Typeable)
 
 
 mkHorizon :: (Integral a, Show a) => a -> EitherError Horizon

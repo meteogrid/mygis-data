@@ -9,7 +9,7 @@ module MyGIS.Data.Store.Raster (
   RasterStore (..)
 ) where
 
-import           Data.Data
+import           Data.Typeable (Typeable2)
 --import           Data.Vector.Unboxed as V
 import           MyGIS.Data.Context
 import           MyGIS.Data.Dimension
@@ -28,7 +28,6 @@ data RasterStore d u where {
 deriving instance Eq (RasterStore d u)
 deriving instance Show (RasterStore d u)
 deriving instance Typeable2 RasterStore
-deriving instance (IsDimension d, IsUnit u) => Data (RasterStore d u)
 
 instance (IsUnit u, IsDimension d) => IsStore RasterStore d u where
     type Src RasterStore d u = RasterSource (RasterStore d u) (DimIx d)

@@ -7,14 +7,14 @@ module MyGIS.Data.Store.Generic (
   , StoreId (..)
 ) where
 
-import           Data.Data (Data, Typeable)
+import           Data.Typeable (Typeable)
 import           MyGIS.Data.Context
 import           MyGIS.Data.Dimension (IsDimension(..), DimIx)
 import           MyGIS.Data.Units (IsUnit)
 
-newtype StoreId = ID (String,String) deriving (Eq,Ord,Show,Typeable,Data)
+newtype StoreId = ID (String,String) deriving (Eq,Ord,Show,Typeable)
 
-class (IsUnit u, IsDimension d, Eq (st d u), Show (st d u), Data (st d u))
+class (IsUnit u, IsDimension d, Eq (st d u), Show (st d u), Typeable (st d u))
   =>  IsStore st d u
   where
     type Src st d u :: *
