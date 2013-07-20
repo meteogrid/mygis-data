@@ -1,10 +1,10 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module MyGIS.Data.Context (
     Context
   , Pixel (..)
   , Point (..)
-  , Box
+  , Box (..)
   , Envelope
   , Shape
 
@@ -15,14 +15,9 @@ module MyGIS.Data.Context (
   , mkEnvelope
   , mkContext
 
-  , minx
-  , miny
-  , maxx
-  , maxy
   , width
   , height
 
-  , cid
   , srs
   , envelope
   , shape
@@ -38,8 +33,7 @@ module MyGIS.Data.Context (
 
 import           Control.Applicative ((<$>), (<*>))
 
-import           Data.Text (Text)
-import           Data.Text.Binary()
+import           Data.Typeable (Typeable)
 import           Data.Monoid (Monoid(..))
 import           Data.Binary (Binary(..))
 
@@ -48,28 +42,27 @@ import           MyGIS.Data.Error (mkError, EitherError)
 
 
 data Context = Context {    
-    cid      :: !Text
-  , envelope :: !Envelope
+    envelope :: !Envelope
   , shape    :: !Shape
   , srs      :: !SpatialReference
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Typeable)
 
 instance Binary Context where
-  put (Context a b c d) = put a >> put b >> put c >> put d
-  get                   = Context <$> get <*> get <*> get <*> get
+  put (Context a b c) = put a >> put b >> put c
+  get                 = Context <$> get <*> get <*> get
 
 mkContext ::
-  Text -> Envelope -> Shape -> SpatialReference -> EitherError Context
-mkContext i e s sr
+  Envelope -> Shape -> SpatialReference -> EitherError Context
+mkContext e s sr
     | isEmpty e || isEmpty s = mkError "mkContext: empty shape or envelope"
-    | otherwise              = Right $ Context i e s sr
+    | otherwise              = Right $ Context e s sr
 
 data Box a = Box {
     minx :: !a
   , miny :: !a
   , maxx :: !a
   , maxy :: !a
-} deriving (Eq, Show)
+} deriving (Eq, Show, Typeable)
 
 instance (Ord a, Num a) => Monoid (Box a) where
     mempty = emptyBox
@@ -130,18 +123,18 @@ fromSPixel (SubPixel x y) = Pixel (round x) (round y)
 {-# INLINE fromSPixel #-}
 
 width, height :: Num a => Box a -> a
-width  b = (maxx b) - (minx b)
-height b = (maxy b) - (miny b)
-
+width  b = maxx b - minx b
 {-# SPECIALIZE INLINE width :: Envelope -> Double #-}
-{-# SPECIALIZE INLINE height :: Envelope -> Double #-}
 {-# SPECIALIZE INLINE width :: Shape -> Int #-}
+
+height b = maxy b - miny b
+{-# SPECIALIZE INLINE height :: Envelope -> Double #-}
 {-# SPECIALIZE INLINE height :: Shape -> Int #-}
 
 type Shape = Box Int
 
 mkShape :: Int -> Int -> Shape
-mkShape x y = mkBox 0 0 x y
+mkShape = mkBox 0 0
 
 type Envelope = Box Double
 
@@ -151,31 +144,30 @@ mkEnvelope = mkBox
 
 forwardS :: Context -> Point -> SubPixel
 forwardS ctx (Point x y) = SubPixel ln col
-    where col     = (x - (minx e)) * sx
-          ln      = ((maxy e) - y) * sy
+    where col     = (x - minx e) * sx
+          ln      = (maxy e - y) * sy
           (sx,sy) = scale ctx
-          e        = (envelope ctx)
+          e       = envelope ctx
 
 scale :: Context -> (Double, Double)
 scale ctx = (sx,sy)
-  where sx = (fromIntegral (width s)) / width e
-        sy = (fromIntegral (height s)) / height e
+  where sx = fromIntegral (width s) / width e
+        sy = fromIntegral (height s) / height e
         s  = shape ctx
         e  = envelope ctx
 {-# INLINE scale #-}
 
 backwardS :: Context -> SubPixel -> Point
 backwardS ctx (SubPixel ln col) = Point x y
-    where x       = (minx e) + col / sx
-          y       = (maxy e) - ln / sy
+    where x       = minx e + col / sx
+          y       = maxy e - ln / sy
           (sx,sy) = scale ctx
-          e        = (envelope ctx)
+          e       = envelope ctx
 
 forward :: Context -> Point -> Pixel
-forward ctx = fromSPixel . (forwardS ctx)
+forward ctx = fromSPixel . forwardS ctx
+{-# INLINE forward #-}
 
 backward :: Context -> Pixel -> Point
-backward ctx = (backwardS ctx) . toSPixel
-
-{-# INLINE forward #-}
+backward ctx = backwardS ctx . toSPixel
 {-# INLINE backward #-}

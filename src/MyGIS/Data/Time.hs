@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module MyGIS.Data.Time (
     Time
   , Horizon
@@ -11,6 +12,7 @@ module MyGIS.Data.Time (
   , addHorizon
 ) where
 
+import           Data.Typeable (Typeable)
 import           Data.Time.Calendar ( Day(ModifiedJulianDay) )
 import           Data.Time.Clock ( UTCTime(UTCTime), secondsToDiffTime,
                                   addUTCTime, diffUTCTime, NominalDiffTime )
@@ -23,12 +25,12 @@ import           System.Locale (defaultTimeLocale)
 import qualified Data.Time.Format as T
 import           MyGIS.Data.Error (EitherError, mapE, mkError)
 
-newtype Time = Time {toUTCTime :: UTCTime} deriving (Eq, Ord)
+newtype Time = Time {toUTCTime :: UTCTime} deriving (Eq, Ord, Typeable)
 
 instance Show Time where show = formatTime iso8601
 
 formatTime :: String -> Time -> String
-formatTime fmt = (T.formatTime defaultTimeLocale fmt) . toUTCTime
+formatTime fmt = T.formatTime defaultTimeLocale fmt . toUTCTime
 
 iso8601 :: String
 iso8601 = "%Y-%m-%dT%H:%MZ"
@@ -58,13 +60,13 @@ secondsToNominalDiffTime s | s >= 0    = diffUTCTime b a
 
 
 newtype Horizon = Minutes {minutes :: Int}
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Typeable)
 
 
 mkHorizon :: (Integral a, Show a) => a -> EitherError Horizon
 mkHorizon m | m >= 0     = Right . Minutes . fromIntegral $ m
             | otherwise  = mkError ("mkHorizon: '"
-                                ++ (show m)
+                                ++ show m
                                 ++ "' Cannot be negative")
 
 mkHorizons :: (Integral a, Show a) => [a] -> EitherError [Horizon]

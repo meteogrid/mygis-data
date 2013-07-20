@@ -1,17 +1,8 @@
-module MyGIS.Data (
-    module MyGIS.Data.Context
-  , module MyGIS.Data.Dimension
-  , module MyGIS.Data.Source
-  , module MyGIS.Data.Store
-  , module MyGIS.Data.SpatialReference
-  , module MyGIS.Data.Time
-  , module MyGIS.Data.Type
-) where
-
-import MyGIS.Data.Context
-import MyGIS.Data.Dimension
-import MyGIS.Data.Source
-import MyGIS.Data.Store
-import MyGIS.Data.SpatialReference
-import MyGIS.Data.Time
-import MyGIS.Data.Type
+module MyGIS.Data (module X) where
+import MyGIS.Data.Context as X
+import MyGIS.Data.Dimension as X
+import MyGIS.Data.SpatialReference as X
+import MyGIS.Data.Step as X
+import MyGIS.Data.Store as X
+import MyGIS.Data.Time as X
+import MyGIS.Data.Type as X

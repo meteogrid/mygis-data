@@ -5,22 +5,23 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module MyGIS.Data.Dimension (
-    Dimension (..)
-  , DimensionIx (..)
-  , DimensionIxKey
+    IsDimension (..)
+  , IsDimensionIx (..)
+  , IsDimensionIxKey
   , ObservationTimeDimension (..) 
   , ForecastTimeDimension (..) 
   , ObservationTimeIx (..) 
   , ForecastTimeIx (..) 
 ) where
 
-import           Data.Text (Text, pack)
 import           Data.Typeable (Typeable)
+import           Data.Text hiding (map)
 
-import MyGIS.Data.Time (CronSchedule, Horizon, Time)
+import MyGIS.Data.Time
+import MyGIS.Data.ThirdPartyInstances()
 
 
-class (Show d, Typeable d, DimensionIx (DimIx d)) => Dimension d where
+class (Show d, Typeable d, Eq d, IsDimensionIx (DimIx d)) => IsDimension d where
     type DimIx d :: *
     nextIx         :: d -> DimIx d -> DimIx d
     prevIx         :: d -> DimIx d -> DimIx d
@@ -38,21 +39,15 @@ class (Show d, Typeable d, DimensionIx (DimIx d)) => Dimension d where
               cond  = if from < to then (<=) else (>=)
 
 data ObservationTimeDimension = ObservationTimeDimension CronSchedule
-  deriving (Show, Typeable)
+  deriving (Show, Eq, Typeable)
 
 
 
-data ForecastTimeDimension =
-    ForecastTimeDimension CronSchedule
-  | ForecastTimeDimensionF CronSchedule (Time->[Horizon])
-  deriving Typeable
+data ForecastTimeDimension = ForecastTimeDimension CronSchedule [Horizon]
+  deriving (Show, Eq, Typeable)
 
-instance Show ForecastTimeDimension where
-  show (ForecastTimeDimension c) = "ForecastTimeDimension " ++ (show c)
-  show (ForecastTimeDimensionF c _)
-    = "ForecastTimeDimension " ++ (show c) ++ " <func>"
 
-instance Dimension ObservationTimeDimension  where
+instance IsDimension ObservationTimeDimension  where
     type DimIx ObservationTimeDimension = ObservationTimeIx
     nextIx       = undefined
     prevIx       = undefined
@@ -60,7 +55,7 @@ instance Dimension ObservationTimeDimension  where
     floorIx      = undefined
     roundIx      = undefined
 
-instance Dimension ForecastTimeDimension where
+instance IsDimension ForecastTimeDimension where
     type DimIx ForecastTimeDimension = ForecastTimeIx
     nextIx       = undefined
     prevIx       = undefined
@@ -69,21 +64,21 @@ instance Dimension ForecastTimeDimension where
     roundIx      = undefined
  
 
-type DimensionIxKey = [Text]
+type IsDimensionIxKey = [Text]
 
-class (Show ix, Typeable ix, Ord ix, Eq ix) => DimensionIx ix where
-    ixKey          :: ix -> DimensionIxKey
+class (Show ix, Typeable ix, Ord ix, Eq ix) => IsDimensionIx ix where
+    ixKey          :: ix -> IsDimensionIxKey
 
 
 
 data ObservationTimeIx = ObservationTimeIx Time
   deriving (Eq, Ord, Show, Typeable)
 
-instance DimensionIx ObservationTimeIx where
+instance IsDimensionIx ObservationTimeIx where
     ixKey (ObservationTimeIx t) = map pack [show t]
 
 data ForecastTimeIx = ForecastTimeIx Time Horizon
   deriving (Eq, Ord, Show, Typeable)
 
-instance DimensionIx ForecastTimeIx where
+instance IsDimensionIx ForecastTimeIx where
     ixKey (ForecastTimeIx t h) = map pack [show t, show h]

@@ -1,5 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module MyGIS.Data.IO.Raster
 (
@@ -27,17 +29,19 @@ import           Control.Monad
 import           Control.Proxy
 import           Control.Proxy.Safe
 import           Data.Binary
+import           Data.Binary.Get (getWord16host, getWord32host)
+import           Data.Binary.Put (putWord16host, putWord32host)
 import           Data.Int
 import qualified Data.Vector.Storable as St
 import qualified Data.Vector.Storable.Mutable as Stm
 import qualified Data.ByteString.Lazy as BS
 import           Data.Vector.Binary()
-
 import           System.IO
+import           System.IO.Unsafe (unsafePerformIO)
 
 import           MyGIS.Data.Context
 
-data Raster = Raster {
+data Raster a = Raster {
     options :: Options
   , context :: Context
   , path    :: FilePath
@@ -86,8 +90,7 @@ instance Binary FileHeader where
     >> put (fhOffsets fh)
   {-# INLINE get #-}
   get
-    = do version <- Version <$> get <*> get
-         FileHeader <$> (pure version) <*> get <*> get <*> get
+    = FileHeader <$> liftA2 Version get get <*> get <*> get <*> get
 
 
 type BlockOffset = Int64
@@ -105,16 +108,46 @@ fileHeader10 :: Options -> Context -> St.Vector BlockOffset -> FileHeader
 fileHeader10 = FileHeader version10
 
 
-data Block = Block !(St.Vector DataType)
-instance NFData Block where
+data Block a = Block !(St.Vector a)
+instance NFData (Block a) where
 
-instance Binary Block where
+class (Binary a, Stm.Storable a) => BlockData a where
+
+instance BlockData Int8
+instance BlockData Int16
+instance BlockData Int32
+instance BlockData Int
+
+instance Binary (Block Int16) where
   {-# INLINE put #-}
-  put (Block a) = put a
+  put (Block a) =  putWord32host ((fromIntegral . St.length) a)
+                >> St.forM_ a (putWord16host.fromIntegral)
   {-# INLINE get #-}
-  get           = Block <$> get
+  get = do
+      n <- liftM fromIntegral getWord32host
+      -- new unitinialized array
+      mv <- (return . unsafePerformIO) $ Stm.new n
+      let fill !i
+              | i < n = do
+                  x <- liftM fromIntegral getWord16host
+                  (unsafePerformIO $ Stm.unsafeWrite mv i x) `seq` return ()
+                  fill (i+1)
 
-type DataType = Int16
+              | otherwise = return ()
+      fill 0
+      !data_ <- (return . unsafePerformIO) $ St.unsafeFreeze mv
+      return $ Block data_
+
+
+{-
+instance BlockData a => Binary (Block a) where
+  {-# INLINE put #-}
+  put (Block a) = put (St.length a) >> St.forM_ a put
+  {-# INLINE get #-}
+  get           = do len <- get
+                     vec <- St.replicateM len get
+                     return $ Block vec
+-}
 
 
 data BlockIx = BlockIx !Int !Int deriving (Eq,Show)
@@ -128,37 +161,32 @@ instance NFData BlockIx where
 
 
 -- | reader is a pipe server that reads blocks from a *seekable* file handle
-reader :: (Proxy p)
+reader :: (Proxy p, BlockData a, Binary (Block a))
   => Handle
   -> BlockIx
-  -> Server p BlockIx Block IO ()
-
+  -> Server p BlockIx (Block a) IO ()
 reader h = runIdentityK initialize
   where
     initialize ix = do
         lift $ hSetBinaryMode h True
         contents <- lift $ BS.hGetContents h
-        loop (force $ decode contents) ix
-    loop !fh ix = do
-        let ref = getOffLen fh ix
-            decompress = decompressor $ compression $ fhOptions fh
-        case  
-             ref of
-             Just (off,len) -> do
-                lift $ hSeek h AbsoluteSeek off
-                !block <- lift $
-                    liftM (force . decode . decompress) $ BS.hGet h len
-                next <- respond block
-                loop fh next
-             Nothing -> error "corrupted file" --TODO: throw catchable exception
-
+        let header = (force $ decode contents)
+            decompress = decompressor $ compression $ fhOptions header
+        loop header decompress ix
+    loop fh c !ix =
+        case getOffLen fh ix of
+             Just (off,len) -> lift (readBlock h c off len)
+                               >>= respond >>= loop fh c
+             Nothing        -> error "corrupted file"
+{-# SPECIALISE INLINE reader :: (Proxy p) =>
+       Handle -> BlockIx -> Server p BlockIx (Block Int16) IO () #-}
 
 -- | writer is a pipe client that writes blocks to a file handle
-writer :: (Proxy p)
+writer :: (Proxy p, BlockData a, Binary (Block a))
   => Handle
-  -> Raster
+  -> Raster a
   -> ()
-  -> Client p BlockIx Block IO ()
+  -> Client p BlockIx (Block a) IO ()
 writer h raster () = runIdentityP $ do
     -- Create a dummy header with the correct number of offsets to compute
     -- the first block's offset.
@@ -168,20 +196,17 @@ writer h raster () = runIdentityP $ do
         nRefs     = nx * ny + 1
         fstBlkOff = fromIntegral . BS.length . encode $ header
         (nx,ny)   = numBlocks (context raster) (options raster)
-        compress = compressor (compression $ options raster)
+        compress  = compressor (compression $ options raster)
     
     -- Request all blocks from pipe and write them to file while updating
     -- mutable list of BlockOffsets
     blockRefs <- lift $ Stm.new nRefs
     lift $ hSeek h AbsoluteSeek fstBlkOff
     forM_  (zip [0..] (blockIndexes (nx,ny))) $ \(!i, !ix) -> do
-        !block <- request ix
-        off <- lift $ liftM fromIntegral $ hTell h
-        lift $ BS.hPut h $ compress $ encode block
-        lift $ Stm.unsafeWrite blockRefs i off
+        lift $ liftM fromIntegral (hTell h) >>= Stm.unsafeWrite blockRefs i
+        request ix >>= \b -> lift $ writeBlock h compress b
 
-    off <- lift $ liftM fromIntegral $ hTell h
-    lift $ Stm.unsafeWrite blockRefs (nRefs-1) off
+    lift $ liftM fromIntegral (hTell h) >>= Stm.unsafeWrite blockRefs (nRefs-1)
     blockRefs' <- lift $ St.unsafeFreeze blockRefs
 
     -- Create final header and write it at the beginning of the file
@@ -189,29 +214,43 @@ writer h raster () = runIdentityP $ do
     lift $ hSeek h AbsoluteSeek 0
     lift $ BS.hPut h (encode finalHeader)
 
+{-# SPECIALISE INLINE writer :: (Proxy p) =>
+       Handle -> Raster Int16 -> () -> Client p BlockIx (Block Int16) IO () #-}
 
-{-# INLINE blockIndexes #-}
+
 blockIndexes :: (Int,Int) -> [BlockIx]
 blockIndexes (bx,by) = [ BlockIx i j | j <- [0..by-1], i <- [0..bx-1]]
+{-# INLINE blockIndexes #-}
 
 
-{-# INLINE getOffLen #-}
 getOffLen :: FileHeader -> BlockIx -> Maybe (Integer, Int)
 getOffLen h (BlockIx x y)
     = do let nx = fst $ numBlocks (fhContext h) (fhOptions h)
-         off  <- (fhOffsets h) St.!? (nx*y + x)
-         off' <- (fhOffsets h) St.!? (nx*y + x + 1)
+         off  <- fhOffsets h St.!? (nx*y + x)
+         off' <- fhOffsets h St.!? (nx*y + x + 1)
          let len = off' - off
          return (fromIntegral off, fromIntegral len)
+{-# INLINE getOffLen #-}
 
-{-# INLINE numBlocks #-}
 numBlocks :: Context -> Options -> (Int, Int)
 numBlocks ctx opts = (ceiling (nx/bx), ceiling (ny/by))
   where nx = fromIntegral . width  . shape     $ ctx  :: Double
         ny = fromIntegral . height . shape     $ ctx  :: Double
         bx = fromIntegral . fst    . blockSize $ opts :: Double
         by = fromIntegral . snd    . blockSize $ opts :: Double
+{-# INLINE numBlocks #-}
 
+
+writeBlock :: Binary (Block a) => Handle -> Codec -> Block a -> IO ()
+writeBlock h codec = BS.hPut h . codec . encode
+{-# SPECIALISE INLINE writeBlock :: Handle -> Codec -> Block Int16 -> IO () #-}
+
+readBlock :: Binary (Block a) => Handle -> Codec -> Integer -> Int -> IO (Block a)
+readBlock h codec off len
+    = do hSeek h AbsoluteSeek off
+         liftM (decode . codec) (BS.hGet h len)
+{-# SPECIALISE INLINE readBlock ::
+    Handle -> Codec -> Integer -> Int -> IO (Block Int16) #-}
 
 
 withFileS
@@ -221,87 +260,92 @@ withFileS
      -> (Handle -> b' -> ExceptionP p a' a b' b SafeIO r)
      -> b' -> ExceptionP p a' a b' b SafeIO r
 withFileS pth mode p b'
-  = bracket id (openFile pth mode) hClose (\h -> p h b')
+  = bracket id (openFile pth mode) hClose (`p` b')
 
 
 
-readerS :: (CheckP p)
-  => Raster
+readerS :: (CheckP p, BlockData a, Binary (Block a))
+  => Raster a
   -> BlockIx
-  -> Server (ExceptionP p) BlockIx Block SafeIO ()
+  -> Server (ExceptionP p) BlockIx (Block a) SafeIO ()
 readerS raster
-  = withFileS (path raster) ReadMode (\h -> try . (reader h))
+  = withFileS (path raster) ReadMode (\h -> try . reader h)
+
+{-# SPECIALISE readerS :: CheckP p =>
+       Raster Int16 -> BlockIx -> 
+       Server (ExceptionP p) BlockIx (Block Int16) SafeIO () #-}
 
 
-
-writerS :: (CheckP p)
-  => Raster
+writerS :: (CheckP p, BlockData a, Binary (Block a))
+  => Raster a
   -> ()
-  -> Client (ExceptionP p) BlockIx Block SafeIO ()
+  -> Client (ExceptionP p) BlockIx (Block a) SafeIO ()
 writerS raster
-  = withFileS (path raster) WriteMode (\h -> try . (writer h raster))
+  = withFileS (path raster) WriteMode (\h -> try . writer h raster)
 
+{-# SPECIALISE writerS :: CheckP p =>
+       Raster Int16 -> () -> 
+       Client (ExceptionP p) BlockIx (Block Int16) SafeIO () #-}
 
 
 -- | pixelGenerator is a pipe server that generates blocks with a function
---   (Pixel -> DataType)
-pixelGenerator :: (Proxy p, Monad m)
-  => (Pixel->DataType)
-  -> Raster
+--   (Pixel -> a)
+pixelGenerator :: (Proxy p, Monad m, BlockData a)
+  => (Pixel->a)
+  -> Raster a
   -> BlockIx
-  -> Server p BlockIx Block m ()
-
+  -> Server p BlockIx (Block a) m ()
 pixelGenerator f raster = runIdentityK loop
   where
-    loop (BlockIx bx by) = do
-        let (nx,ny)  = blockSize . options $ raster
-            x0       = nx * bx
-            y0       = ny * by
-            !data_   = St.generate (nx*ny) $ genPx
-            !block   = Block data_
-            genPx i = let (!x,!y) = i `divMod` nx
-                          !px    = Pixel (x0+x) (y0+y)
-                      in f px
-        next <- respond block
-        loop next
-
-replicateGenerator :: (Proxy p, Monad m)
-  => DataType
-  -> Raster
+    (!nx,!ny)             = blockSize . options $ raster
+    loop (BlockIx bx by) = respond block >>= loop
+      where !block   = Block data_
+            data_    = St.generate (nx*ny) genPx
+            genPx i  = let (!x,!y) = i `divMod` nx
+                       in f $ Pixel (x0+x) (y0+y)
+            {-# INLINE [0] genPx #-}
+            !x0      = nx * bx
+            !y0      = ny * by
+{-# SPECIALISE pixelGenerator :: (Proxy p, Monad m)
+  => (Pixel->Int16)
+  -> Raster Int16
   -> BlockIx
-  -> Server p BlockIx Block m ()
+  -> Server p BlockIx (Block Int16) m () #-}
+
+replicateGenerator :: (Proxy p, Monad m, BlockData a)
+  => a
+  -> Raster a
+  -> BlockIx
+  -> Server p BlockIx (Block a) m ()
 replicateGenerator v raster = runIdentityK loop
   where
-    loop _ = do
-        let (nx,ny)  = blockSize . options $ raster
-            !data_   = St.replicate (nx*ny) v
-            !block   = Block data_
-        next <- respond block
-        loop next
+    (nx,ny)  = blockSize . options $ raster
+    loop _   = respond block >>= loop
+      where data_ = St.replicate (nx*ny) v
+            block = Block data_
 
 
 -- | pointGenerator is a pipe server that generates blocks with a function
---   (Point -> DataType)
-pointGenerator :: (Proxy p, Monad m)
-  => (Point->DataType)
-  -> Raster
+--   (Point -> a)
+pointGenerator :: (Proxy p, Monad m, BlockData a)
+  => (Point->a)
+  -> Raster a
   -> BlockIx
-  -> Server p BlockIx Block m ()
+  -> Server p BlockIx (Block a) m ()
 pointGenerator f raster = pixelGenerator f' raster
-   where f' = f . (backward (context raster))
+   where f' = f . backward (context raster)
 
 
 sink :: (Proxy p)
-  => Raster
+  => Raster a
   -> ()
-  -> Client p BlockIx Block IO ()
-sink raster () = runIdentityP $ do
-    let (nx,ny)   = numBlocks (context raster) (options raster)
-        indexes   = blockIndexes (nx,ny)
+  -> Client p BlockIx (Block a) IO ()
+sink raster ()
+    = runIdentityP $ mapM_ requestBlock ixs
+  where nbs = numBlocks (context raster) (options raster)
+        ixs = blockIndexes nbs
+        requestBlock i = request i >>= (\b -> force b `seq` return ())
     
-    forM_ indexes $ \(!ix) -> do
-        !_ <- liftM force $ request ix
-        return ()
 
 
 
@@ -313,8 +357,9 @@ runSession = runSafeIO . runProxy . runEitherK
 
 
 
+type Codec = BS.ByteString -> BS.ByteString
 
-compressor :: CompressionLevel -> BS.ByteString -> BS.ByteString
+compressor :: CompressionLevel -> Codec
 compressor level
     = case level of
            0  -> id         
@@ -323,7 +368,7 @@ compressor level
                    -- , compressStrategy = huffmanOnlyStrategy
                    }
 
-decompressor :: CompressionLevel -> BS.ByteString -> BS.ByteString
+decompressor :: CompressionLevel -> Codec
 decompressor level
     = case level of
            0  -> id         

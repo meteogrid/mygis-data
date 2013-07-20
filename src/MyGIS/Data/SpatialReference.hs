@@ -5,4 +5,5 @@ module MyGIS.Data.SpatialReference (
 
 type SpatialReference = String
 
+epsg25830 :: String
 epsg25830 = "dummy"

@@ -4,6 +4,7 @@
 
 module TestRasterIO (tests) where
 
+import Data.Int
 import Data.Maybe
 import System.IO
 import System.IO.Temp
@@ -40,10 +41,11 @@ write_read_write_and_verify comp = do
     let pFunc (Pixel i j)
             = fromIntegral (i*j)
         Right ctx
-            = mkContext "" (mkEnvelope 0 0 100 100) (mkShape 1000 1000) ""
+            = mkContext (mkEnvelope 0 0 100 100) (mkShape 1000 1000) ""
     withSystemTempDirectory "test." $ \tmpDir -> do
         let path1   = joinPath [tmpDir, "prueba1.bin"]
             path2   = joinPath [tmpDir, "prueba2.bin"]
+            raster, raster2 :: Raster Int16
             raster  = Raster defaultOptions {compression = comp} ctx path1
             raster2 = Raster defaultOptions {compression = comp} ctx path2
 
@@ -60,12 +62,13 @@ write_read_write_and_verify comp = do
 case_compress_makes_smaller_files_for_all_same_value ::  IO()
 case_compress_makes_smaller_files_for_all_same_value = do
     let Right ctx
-            = mkContext "" (mkEnvelope 0 0 100 100) (mkShape 1000 1000) ""
+            = mkContext (mkEnvelope 0 0 100 100) (mkShape 1000 1000) ""
     withSystemTempDirectory "test." $ \tmpDir -> do
         let path1   = joinPath [tmpDir, "uncompressed.bin"]
             path2   = joinPath [tmpDir, "compressed.bin"]
             opts1   = defaultOptions {compression = 0}
             opts2   = defaultOptions {compression = 9}
+            raster, raster2 :: Raster Int16
             raster  = Raster opts1 ctx path1
             raster2 = Raster opts2 ctx path2
 

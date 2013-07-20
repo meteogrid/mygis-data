@@ -33,7 +33,7 @@ instance Arbitrary Shape where
 
 instance Arbitrary Context where
     arbitrary = do
-        ctx <- mkContext <$> pure "" <*> arbitrary <*> arbitrary <*> pure ""
+        ctx <- mkContext <$> arbitrary <*> arbitrary <*> pure ""
         either (\_ -> arbitrary) return ctx
 
 instance Arbitrary Pixel where

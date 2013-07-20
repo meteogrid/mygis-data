@@ -4,7 +4,7 @@ module MyGIS.Data.Error (
   , mkError
 ) where
 
-import           Data.List as T (intersperse)
+import           Data.List as T (intercalate)
 import           Data.Either (partitionEithers)
 
 type Error = String
@@ -15,7 +15,7 @@ type EitherError a = Either Error a
 mapE :: (a -> EitherError b) -> Error -> [a] -> EitherError [b]
 mapE f sep xs = if null errors
                 then Right result
-                else Left . concat . intersperse sep $ errors
+                else Left . intercalate sep $ errors
   where (errors,result) = partitionEithers . map f $ xs
 
 mkError :: String -> EitherError b
