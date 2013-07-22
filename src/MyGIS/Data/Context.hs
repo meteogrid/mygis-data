@@ -4,7 +4,7 @@ module MyGIS.Data.Context (
     Context
   , Pixel (..)
   , Point (..)
-  , Box
+  , Box (..)
   , Envelope
   , Shape
 
@@ -15,10 +15,6 @@ module MyGIS.Data.Context (
   , mkEnvelope
   , mkContext
 
-  , minx
-  , miny
-  , maxx
-  , maxy
   , width
   , height
 
