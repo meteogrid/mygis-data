@@ -19,7 +19,7 @@ benchConfig = defaultConfig {
 main :: IO ()
 main = withSystemTempDirectory "bench." $ \tmpDir -> do
   let tP f       = joinPath [tmpDir, f]
-      Right c    = mkContext (mkEnvelope 0 0 1 1) (mkShape 3000 3000) ""
+      Right c    = mkGeoReference (mkExtent 0 0 1 1) (mkShape 3000 3000) ""
       rs :: [Raster Int16]
       rs         = [ Raster defaultOptions {compression=i} c (tP ("r"++show i)) |
                      i <- levels ] 

@@ -1,44 +1,40 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GADTs #-}
 
 module MyGIS.Data.Store.Raster (
   RasterStore (..)
 ) where
 
-import           Data.Typeable (Typeable2)
+import           Data.Typeable (Typeable, Typeable3)
 --import           Data.Vector.Unboxed as V
 import           MyGIS.Data.Context
 import           MyGIS.Data.Dimension
-import           MyGIS.Data.Units (IsUnit)
+import           MyGIS.Data.Units (Unit)
 import           MyGIS.Data.Store.Generic
 
 
-data RasterStore d u where {
-    RasterStore :: (IsUnit u, IsDimension d) => {
-        rsId      :: StoreId
-      , rsContext :: Context
-      , rsDim     :: d
-      , rsUnits   :: u
-      } -> RasterStore d u
-}
-deriving instance Eq (RasterStore d u)
-deriving instance Show (RasterStore d u)
-deriving instance Typeable2 RasterStore
+data RasterStore d u t = RasterStore {
+    rsId      :: StoreID
+  , rsDim     :: d
+  , rsUnits   :: Unit u t
+} deriving (Eq, Show, Typeable)
 
-instance (IsUnit u, IsDimension d) => IsStore RasterStore d u where
-    type Src RasterStore d u = RasterSource (RasterStore d u) (DimIx d)
-    getSource                = RasterSource
-    dimension                = rsDim
-    storeId                  = rsId
-    context                  = rsContext
-    units                    = rsUnits
+instance (IsDimension d, Typeable t, Show t, Typeable u, Show u, Num t, Eq t)
+  => IsStore RasterStore d u t where
+    type Src RasterStore d u t = RasterSource (RasterStore d u t) (DimIx d)
+    getSource                  = RasterSource
+    dimension                  = rsDim
+    storeId                    = rsId
+    units                      = rsUnits
 
 
-data RasterSource s ix = RasterSource s ix
+data RasterSource s ix = RasterSource s Context ix
   deriving (Eq, Show)
 
 {-

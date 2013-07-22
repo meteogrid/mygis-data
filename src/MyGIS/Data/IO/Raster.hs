@@ -43,7 +43,7 @@ import           MyGIS.Data.Context
 
 data Raster a = Raster {
     options :: Options
-  , context :: Context
+  , georef :: GeoReference
   , path    :: FilePath
 }
 
@@ -75,7 +75,7 @@ type CompressionLevel = Int
 data FileHeader = FileHeader {
     fhVersion :: Version
   , fhOptions :: !Options
-  , fhContext :: !Context
+  , fhGeoReference :: !GeoReference
   , fhOffsets :: !(St.Vector BlockOffset)
 } deriving Show
 
@@ -86,7 +86,7 @@ instance Binary FileHeader where
     =  put (vMajor $ fhVersion fh)
     >> put (vMinor $ fhVersion fh)
     >> put (fhOptions fh)
-    >> put (fhContext fh)
+    >> put (fhGeoReference fh)
     >> put (fhOffsets fh)
   {-# INLINE get #-}
   get
@@ -104,7 +104,7 @@ data Version = Version {
 version10 :: Version
 version10 = Version 1 0
 
-fileHeader10 :: Options -> Context -> St.Vector BlockOffset -> FileHeader
+fileHeader10 :: Options -> GeoReference -> St.Vector BlockOffset -> FileHeader
 fileHeader10 = FileHeader version10
 
 
@@ -191,11 +191,11 @@ writer h raster () = runIdentityP $ do
     -- Create a dummy header with the correct number of offsets to compute
     -- the first block's offset.
     -- FIXME: Calculate first block offset without encoding a dummy header
-    let header    = fileHeader10 (options raster) (context raster) dummyRefs
+    let header    = fileHeader10 (options raster) (georef raster) dummyRefs
         dummyRefs = St.replicate nRefs 0
         nRefs     = nx * ny + 1
         fstBlkOff = fromIntegral . BS.length . encode $ header
-        (nx,ny)   = numBlocks (context raster) (options raster)
+        (nx,ny)   = numBlocks (georef raster) (options raster)
         compress  = compressor (compression $ options raster)
     
     -- Request all blocks from pipe and write them to file while updating
@@ -210,7 +210,7 @@ writer h raster () = runIdentityP $ do
     blockRefs' <- lift $ St.unsafeFreeze blockRefs
 
     -- Create final header and write it at the beginning of the file
-    let finalHeader = fileHeader10 (options raster) (context raster) blockRefs'
+    let finalHeader = fileHeader10 (options raster) (georef raster) blockRefs'
     lift $ hSeek h AbsoluteSeek 0
     lift $ BS.hPut h (encode finalHeader)
 
@@ -225,14 +225,14 @@ blockIndexes (bx,by) = [ BlockIx i j | j <- [0..by-1], i <- [0..bx-1]]
 
 getOffLen :: FileHeader -> BlockIx -> Maybe (Integer, Int)
 getOffLen h (BlockIx x y)
-    = do let nx = fst $ numBlocks (fhContext h) (fhOptions h)
+    = do let nx = fst $ numBlocks (fhGeoReference h) (fhOptions h)
          off  <- fhOffsets h St.!? (nx*y + x)
          off' <- fhOffsets h St.!? (nx*y + x + 1)
          let len = off' - off
          return (fromIntegral off, fromIntegral len)
 {-# INLINE getOffLen #-}
 
-numBlocks :: Context -> Options -> (Int, Int)
+numBlocks :: GeoReference -> Options -> (Int, Int)
 numBlocks ctx opts = (ceiling (nx/bx), ceiling (ny/by))
   where nx = fromIntegral . width  . shape     $ ctx  :: Double
         ny = fromIntegral . height . shape     $ ctx  :: Double
@@ -333,7 +333,7 @@ pointGenerator :: (Proxy p, Monad m, BlockData a)
   -> BlockIx
   -> Server p BlockIx (Block a) m ()
 pointGenerator f raster = pixelGenerator f' raster
-   where f' = f . backward (context raster)
+   where f' = f . backward (georef raster)
 
 
 sink :: (Proxy p)
@@ -342,7 +342,7 @@ sink :: (Proxy p)
   -> Client p BlockIx (Block a) IO ()
 sink raster ()
     = runIdentityP $ mapM_ requestBlock ixs
-  where nbs = numBlocks (context raster) (options raster)
+  where nbs = numBlocks (georef raster) (options raster)
         ixs = blockIndexes nbs
         requestBlock i = request i >>= (\b -> force b `seq` return ())
     

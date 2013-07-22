@@ -1,25 +1,26 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module MyGIS.Data.Context (
-    Context
+    GeoReference
+  , Context (..)
   , Pixel (..)
   , Point (..)
   , Box (..)
-  , Envelope
+  , Extent
   , Shape
 
   , isEmpty
 
   , mkBox
   , mkShape
-  , mkEnvelope
-  , mkContext
+  , mkExtent
+  , mkGeoReference
 
   , width
   , height
 
   , srs
-  , envelope
+  , extent
   , shape
 
   , forward
@@ -33,6 +34,8 @@ module MyGIS.Data.Context (
 
 import           Control.Applicative ((<$>), (<*>))
 
+import           Data.Text (Text)
+import           Data.Text.Binary ()
 import           Data.Typeable (Typeable)
 import           Data.Monoid (Monoid(..))
 import           Data.Binary (Binary(..))
@@ -41,21 +44,33 @@ import           MyGIS.Data.SpatialReference (SpatialReference)
 import           MyGIS.Data.Error (mkError, EitherError)
 
 
-data Context = Context {    
-    envelope :: !Envelope
-  , shape    :: !Shape
-  , srs      :: !SpatialReference
+data GeoReference = GeoReference {    
+    extent :: !Extent
+  , shape  :: !Shape
+  , srs    :: SpatialReference
   } deriving (Eq, Show, Typeable)
 
-instance Binary Context where
-  put (Context a b c) = put a >> put b >> put c
-  get                 = Context <$> get <*> get <*> get
 
-mkContext ::
-  Envelope -> Shape -> SpatialReference -> EitherError Context
-mkContext e s sr
-    | isEmpty e || isEmpty s = mkError "mkContext: empty shape or envelope"
-    | otherwise              = Right $ Context e s sr
+instance Binary GeoReference where
+  put (GeoReference a b c) = put a >> put b >> put c
+  get                      = GeoReference <$> get <*> get <*> get
+
+mkGeoReference ::
+  Extent -> Shape -> SpatialReference -> EitherError GeoReference
+mkGeoReference e s sr
+    | isEmpty e || isEmpty s = mkError "mkGeoReference: empty shape or extent"
+    | otherwise              = Right $ GeoReference e s sr
+
+type ContextID = Text
+
+data Context = Context
+  { contextId :: ContextID
+  , geoRef    :: GeoReference
+} deriving (Eq, Show, Typeable)
+
+instance Binary Context where
+  put (Context a b) = put a >> put b
+  get               = Context <$> get <*> get
 
 data Box a = Box {
     minx :: !a
@@ -124,11 +139,11 @@ fromSPixel (SubPixel x y) = Pixel (round x) (round y)
 
 width, height :: Num a => Box a -> a
 width  b = maxx b - minx b
-{-# SPECIALIZE INLINE width :: Envelope -> Double #-}
+{-# SPECIALIZE INLINE width :: Extent -> Double #-}
 {-# SPECIALIZE INLINE width :: Shape -> Int #-}
 
 height b = maxy b - miny b
-{-# SPECIALIZE INLINE height :: Envelope -> Double #-}
+{-# SPECIALIZE INLINE height :: Extent -> Double #-}
 {-# SPECIALIZE INLINE height :: Shape -> Int #-}
 
 type Shape = Box Int
@@ -136,38 +151,38 @@ type Shape = Box Int
 mkShape :: Int -> Int -> Shape
 mkShape = mkBox 0 0
 
-type Envelope = Box Double
+type Extent = Box Double
 
-mkEnvelope :: Double -> Double -> Double -> Double ->  Envelope
-mkEnvelope = mkBox
+mkExtent :: Double -> Double -> Double -> Double ->  Extent
+mkExtent = mkBox
 
 
-forwardS :: Context -> Point -> SubPixel
+forwardS :: GeoReference -> Point -> SubPixel
 forwardS ctx (Point x y) = SubPixel ln col
     where col     = (x - minx e) * sx
           ln      = (maxy e - y) * sy
           (sx,sy) = scale ctx
-          e       = envelope ctx
+          e       = extent ctx
 
-scale :: Context -> (Double, Double)
+scale :: GeoReference -> (Double, Double)
 scale ctx = (sx,sy)
   where sx = fromIntegral (width s) / width e
         sy = fromIntegral (height s) / height e
         s  = shape ctx
-        e  = envelope ctx
+        e  = extent ctx
 {-# INLINE scale #-}
 
-backwardS :: Context -> SubPixel -> Point
+backwardS :: GeoReference -> SubPixel -> Point
 backwardS ctx (SubPixel ln col) = Point x y
     where x       = minx e + col / sx
           y       = maxy e - ln / sy
           (sx,sy) = scale ctx
-          e       = envelope ctx
+          e       = extent ctx
 
-forward :: Context -> Point -> Pixel
+forward :: GeoReference -> Point -> Pixel
 forward ctx = fromSPixel . forwardS ctx
 {-# INLINE forward #-}
 
-backward :: Context -> Pixel -> Point
+backward :: GeoReference -> Pixel -> Point
 backward ctx = backwardS ctx . toSPixel
 {-# INLINE backward #-}

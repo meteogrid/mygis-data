@@ -41,7 +41,7 @@ write_read_write_and_verify comp = do
     let pFunc (Pixel i j)
             = fromIntegral (i*j)
         Right ctx
-            = mkContext (mkEnvelope 0 0 100 100) (mkShape 1000 1000) ""
+            = mkGeoReference (mkExtent 0 0 100 100) (mkShape 1000 1000) ""
     withSystemTempDirectory "test." $ \tmpDir -> do
         let path1   = joinPath [tmpDir, "prueba1.bin"]
             path2   = joinPath [tmpDir, "prueba2.bin"]
@@ -62,7 +62,7 @@ write_read_write_and_verify comp = do
 case_compress_makes_smaller_files_for_all_same_value ::  IO()
 case_compress_makes_smaller_files_for_all_same_value = do
     let Right ctx
-            = mkContext (mkEnvelope 0 0 100 100) (mkShape 1000 1000) ""
+            = mkGeoReference (mkExtent 0 0 100 100) (mkShape 1000 1000) ""
     withSystemTempDirectory "test." $ \tmpDir -> do
         let path1   = joinPath [tmpDir, "uncompressed.bin"]
             path2   = joinPath [tmpDir, "compressed.bin"]

@@ -23,10 +23,8 @@ library
 
   exposed-modules:     
     MyGIS.Data,
-    MyGIS.Data.Type,
     MyGIS.Data.Error,
     MyGIS.Data.Store,
-    MyGIS.Data.Step,
     MyGIS.Data.Context,
     MyGIS.Data.Dimension,
     MyGIS.Data.SpatialReference,
