@@ -41,7 +41,7 @@ write_read_write_and_verify comp = do
     let pFunc (Pixel i j)
             = fromIntegral (i*j)
         Right ctx
-            = mkGeoReference (mkExtent 0 0 100 100) (mkShape 1000 1000) ""
+            = mkGeoReference (mkExtent 0 0 100 100) (mkShape 100 100) ""
     withSystemTempDirectory "test." $ \tmpDir -> do
         let path1   = joinPath [tmpDir, "prueba1.bin"]
             path2   = joinPath [tmpDir, "prueba2.bin"]
@@ -55,14 +55,14 @@ write_read_write_and_verify comp = do
         runSession $
             readerS raster >-> writerS raster2
 
-        assertExistsAndSizeGreaterThan path1 (1000*1000*2)
-        assertExistsAndSizeGreaterThan path2 (1000*1000*2)
+        assertExistsAndSizeGreaterThan path1 (100*100*2)
+        assertExistsAndSizeGreaterThan path2 (100*100*2)
         assertFilesEqual path1 path2
         
 case_compress_makes_smaller_files_for_all_same_value ::  IO()
 case_compress_makes_smaller_files_for_all_same_value = do
     let Right ctx
-            = mkGeoReference (mkExtent 0 0 100 100) (mkShape 1000 1000) ""
+            = mkGeoReference (mkExtent 0 0 100 100) (mkShape 100 100) ""
     withSystemTempDirectory "test." $ \tmpDir -> do
         let path1   = joinPath [tmpDir, "uncompressed.bin"]
             path2   = joinPath [tmpDir, "compressed.bin"]

@@ -1,8 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
-module MyGIS.Data.Context (
+module MyGIS.Data.GeoReference (
     GeoReference
-  , Context (..)
   , Pixel (..)
   , Point (..)
   , Box (..)
@@ -34,7 +33,6 @@ module MyGIS.Data.Context (
 
 import           Control.Applicative ((<$>), (<*>))
 
-import           Data.Text (Text)
 import           Data.Text.Binary ()
 import           Data.Typeable (Typeable)
 import           Data.Monoid (Monoid(..))
@@ -61,16 +59,6 @@ mkGeoReference e s sr
     | isEmpty e || isEmpty s = mkError "mkGeoReference: empty shape or extent"
     | otherwise              = Right $ GeoReference e s sr
 
-type ContextID = Text
-
-data Context = Context
-  { contextId :: ContextID
-  , geoRef    :: GeoReference
-} deriving (Eq, Show, Typeable)
-
-instance Binary Context where
-  put (Context a b) = put a >> put b
-  get               = Context <$> get <*> get
 
 data Box a = Box {
     minx :: !a

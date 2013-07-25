@@ -4,7 +4,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module TestContext (tests) where
+module TestGeoReference (tests) where
 
 import Control.Applicative ((<*>), (<$>), pure, liftA)
 import Data.Monoid (Monoid(mempty))
@@ -13,7 +13,7 @@ import Test.Framework
 import Test.Framework.TH
 import Test.Framework.Providers.QuickCheck2
 
-import MyGIS.Data.Context
+import MyGIS.Data.GeoReference
 
 
 tests :: Test.Framework.Test

@@ -6,4 +6,6 @@
 dist
 .hpc
 prueba*
+.cabal-sandbox
 cabal-dev
+cabal.sandbox.config

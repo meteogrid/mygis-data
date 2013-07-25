@@ -39,7 +39,7 @@ import           Data.Vector.Binary()
 import           System.IO
 import           System.IO.Unsafe (unsafePerformIO)
 
-import           MyGIS.Data.Context
+import           MyGIS.Data.GeoReference
 
 data Raster a = Raster {
     options :: Options

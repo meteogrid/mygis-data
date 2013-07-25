@@ -11,12 +11,11 @@ module MyGIS.Data.Store.Raster (
   RasterStore (..)
 ) where
 
-import           Data.Typeable (Typeable, Typeable3)
+import           Data.Typeable (Typeable)
 --import           Data.Vector.Unboxed as V
-import           MyGIS.Data.Context
 import           MyGIS.Data.Dimension
 import           MyGIS.Data.Units (Unit)
-import           MyGIS.Data.Store.Generic
+import           MyGIS.Data.Store.Types
 
 
 data RasterStore d u t = RasterStore {
