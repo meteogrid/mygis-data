@@ -1,41 +1,63 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
 
 module SIGyM.Store.Types (
-    IsStore (..)
+    Dimension (..)
+  , Dimensions
+  , DimensionIx
+  , DynUnits
+  , Ix (..)
   , Store (..)
+  , StoreID (..)
   , Context (..)
   , ContextID
   , Registry (..)
   , StoreRegistry
   , ContextRegistry
-  , StoreID (..)
   , Generation (..)
   , GenError (..)
   , GenEnv (..)
   , GenState (..)
 
-  , fromStore
   , storeId
-  , storeType
+  , storeDimensions
+  , storeUnits
+  , storeUnitsType
+
+  , toDynUnits
 ) where
 
 import           Control.Monad.Reader (ReaderT, MonadReader)
 import           Control.Monad.State (StateT, MonadState)
 import           Control.Monad.Error (ErrorT, MonadError, Error(..))
+import           Data.Char (isAlphaNum, isAscii)
+import           Data.Dynamic (Dynamic, fromDynamic, dynTypeRep, toDyn)
 import           Data.Hashable (Hashable(..))
 import           Data.HashMap (Map)
-import           Data.Text (Text)
+import           Data.String (IsString(..))
+import           Data.Text (Text, pack)
 import           Data.Time.Clock (UTCTime)
-import           Data.Typeable (Typeable, TypeRep, cast, typeOf)
-import           SIGyM.Dimension (IsDimension(..), DimIx)
+import           Data.Typeable (Typeable, TypeRep)
 import           SIGyM.Units (Unit)
 import           SIGyM.GeoReference (GeoReference)
+import           SIGyM.Time
+import           SIGyM.ThirdPartyInstances()
+
+type Dimensions = [Dimension]
+type DimensionIx = [Ix]
+
+data Dimension = ObservationTimeDim CronSchedule
+               | RunTimeDim CronSchedule
+               | HorizonDim Horizon
+               deriving (Eq, Show, Typeable)
+
+data Ix = ObservationTimeIx Time
+        | RunTimeIx Time
+        | HorizonIx Horizon
+        deriving (Eq, Ord, Show, Typeable)
 
 
 data Context = Context
@@ -43,55 +65,80 @@ data Context = Context
   , geoRef           :: GeoReference
 } deriving (Eq, Show, Typeable)
 
+class IsID a where
+   toID :: String -> Maybe a
 
 newtype ContextID = ContextID Text deriving (Eq,Ord,Show,Typeable,Hashable)
+
+instance IsString ContextID where
+  fromString s = maybe (error "fromString: invalid ContextID") id (toID s)
+
+instance IsID ContextID where
+  toID s = if isValidId s then Just $ ContextID $ pack s else Nothing
+
+
 newtype StoreID = StoreID Text deriving (Eq,Ord,Show,Typeable,Hashable)
 
-class ( IsDimension d
-      , Eq (st d u t)
-      , Show (st d u t)
-      , Typeable (st d u t)
-      ) =>  IsStore st d u t
-  where
-    type Src st d u t :: *
+instance IsString StoreID where
+  fromString s = maybe (error "fromString: invalid StoreID") id (toID s)
 
-    sId        :: st d u t -> StoreID
-    getSource  :: st d u t -> Context -> DimIx d -> Src st d u t
-    getSources :: st d u t -> Context -> DimIx d -> DimIx d -> [Src st d u t]
-    dimension  :: st d u t -> d
-    units      :: st d u t -> Unit u t
-    toStore    :: st d u t -> Store
-
-    toStore s = Store (sId s) (typeOf s) s
-
-    getSources s ctx from to =
-        map (getSource s ctx) (enumFromToIx (dimension s) from to)
-
-fromStore :: IsStore st d u t => Store -> Maybe (st d u t)
-fromStore (Store _ _ s) = cast s
+instance IsID StoreID where
+  toID s = if isValidId s then Just $ StoreID $ pack s else Nothing
 
 
-storeId :: Store -> StoreID
-storeId (Store i _ _) = i
+isValidId :: String -> Bool
+isValidId s =  all isValidChar s
+            && head s `notElem` validNonAlphanum
+            && length s < 128
+  where isValidChar c =  all (\f -> f c) [isAlphaNum, isAscii]
+                      || c `elem` validNonAlphanum
+        validNonAlphanum = "-_."
 
-storeType :: Store -> TypeRep
-storeType (Store _ t _) = t
+newtype DynUnits = DynUnits { unDyn :: Dynamic } deriving (Typeable, Show)
 
+toDynUnits :: Typeable (Unit a Double) => Unit a Double -> DynUnits
+toDynUnits = DynUnits . toDyn
 
-data Store where
-  Store :: IsStore st d u t => StoreID -> TypeRep -> st d u t -> Store
+data Store
+  = RasterStore {
+        rsId         :: StoreID
+      , rsDimensions :: Dimensions
+      , rsUnits      :: DynUnits
+    }
+  | GeometryStore {
+        vsId         :: StoreID
+      , vsDimensions :: Dimensions
+      , vsUnits      :: DynUnits
+  }
+  deriving (Show, Typeable)
 
-deriving instance Show Store
-deriving instance Typeable Store
 instance Hashable Store where
-  hashWithSalt s (Store a _ _) = hashWithSalt s a
+  hashWithSalt s st = hashWithSalt s (storeId st)
   {-# INLINE hashWithSalt #-}
+
 instance Eq Store where
-  (Store a _ _) == (Store b _ _) = a == b
+  a == b = storeId a == storeId b
   {-# INLINE (==) #-}
 instance Ord Store where
-  (Store a _ _) `compare` (Store b _ _) = a `compare` b
+  a `compare` b = storeId a `compare` storeId b
   {-# INLINE compare #-}
+
+storeId :: Store -> StoreID
+storeId RasterStore{..} = rsId
+storeId GeometryStore{..} = vsId
+
+storeDimensions :: Store -> Dimensions
+storeDimensions RasterStore{..} = rsDimensions
+storeDimensions GeometryStore{..} = vsDimensions
+
+storeUnits :: Typeable (Unit d a) => Store -> Maybe (Unit d a)
+storeUnits RasterStore{..} = fromDynamic $ unDyn rsUnits
+storeUnits GeometryStore{..} = fromDynamic $ unDyn vsUnits
+
+storeUnitsType :: Store -> TypeRep
+storeUnitsType RasterStore{..} = dynTypeRep $ unDyn rsUnits
+storeUnitsType GeometryStore{..} = dynTypeRep $ unDyn vsUnits
+
 
 
 newtype Generation a = Generation

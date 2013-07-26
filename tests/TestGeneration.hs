@@ -12,7 +12,6 @@ import Test.HUnit
 import Data.Maybe (isJust)
 import SIGyM.Units
 import SIGyM.Store
-import SIGyM.Dimension
 
 
 tests :: Test.Framework.Test
@@ -36,10 +35,11 @@ case_can_getTime = do
     _      -> return ()
 
 dummyStore :: Store
-dummyStore = toStore $ RasterStore dim u sid
-  where sid = StoreID "dummy"
-        dim = NullDimension
-        u   = meter :: Unit DLength Double
+dummyStore = RasterStore {
+    rsId         = "dummy"
+  , rsDimensions = []
+  , rsUnits      = toDynUnits meter
+  }
 
 case_findStore_succeeds_on_registered_store :: IO ()
 case_findStore_succeeds_on_registered_store = do
@@ -51,7 +51,7 @@ case_findStore_succeeds_on_registered_store = do
     
 case_findStore_fails_on_unregistered_store :: IO ()
 case_findStore_fails_on_unregistered_store = do
-  s <- evalGen' $ findStore $ StoreID "foo"
+  s <- evalGen' $ findStore "foo"
   case s of
     Left (RegistryLookupError _) -> return ()
     Right _                      -> assertFailure "unexpected Right as result"

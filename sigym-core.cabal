@@ -27,7 +27,6 @@ library
     SIGyM.Error,
     SIGyM.Store,
     SIGyM.GeoReference,
-    SIGyM.Dimension,
     SIGyM.SpatialReference,
     SIGyM.Time,
     SIGyM.Units,
@@ -35,7 +34,6 @@ library
   
   other-modules:       
     SIGyM.Database.Pool,
-    SIGyM.Store.Raster,
     SIGyM.Store.Registry,
     SIGyM.Store.Types,
     SIGyM.Store.Generation,

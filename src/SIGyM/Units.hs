@@ -1,5 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-} 
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -7,6 +10,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GADTs #-}
 
 module SIGyM.Units (
     module Numeric.Units.Dimensional.TF
@@ -15,7 +19,7 @@ module SIGyM.Units (
   , module Numeric.Units.Dimensional.TF.NonSI
 ) where
 
-import           Prelude ( Show(..), Eq(..), Num, (++), undefined)
+import           Prelude ( Show(..), Eq(..), Num, (++), undefined )
 import           Data.Vector.Generic.Base (Vector)
 import           Data.Vector.Generic.Mutable (MVector)
 import           Data.Vector.Storable (Storable)
@@ -33,4 +37,5 @@ deriving instance Storable a => Storable (Quantity d a)
 
 instance (Show d, Show a, Num a) => Show (Unit d a) where
     show (Dimensional x) = show (undefined :: d) ++ " ("  ++ show x ++ ")"
+
 
