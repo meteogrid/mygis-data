@@ -19,9 +19,9 @@ import           MyGIS.Data.Store.Types
 
 
 data RasterStore d u t = RasterStore {
-    rsId      :: StoreID
-  , rsDim     :: d
+    rsDim     :: d
   , rsUnits   :: Unit u t
+  , rsId      :: StoreID
 } deriving (Eq, Show, Typeable)
 
 instance (IsDimension d, Typeable t, Show t, Typeable u, Show u, Num t, Eq t)
@@ -29,7 +29,7 @@ instance (IsDimension d, Typeable t, Show t, Typeable u, Show u, Num t, Eq t)
     type Src RasterStore d u t = RasterSource (RasterStore d u t) (DimIx d)
     getSource                  = RasterSource
     dimension                  = rsDim
-    storeId                    = rsId
+    sId                        = rsId
     units                      = rsUnits
 
 

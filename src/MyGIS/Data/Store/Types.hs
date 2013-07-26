@@ -14,13 +14,15 @@ module MyGIS.Data.Store.Types (
   , Registry (..)
   , StoreRegistry
   , ContextRegistry
-  , StoreID
+  , StoreID (..)
   , Generation (..)
   , GenError (..)
   , GenEnv (..)
   , GenState (..)
 
   , fromStore
+  , storeId
+  , storeType
 ) where
 
 import           Control.Monad.Reader (ReaderT, MonadReader)
@@ -29,7 +31,7 @@ import           Control.Monad.Error (ErrorT, MonadError, Error(..))
 import           Data.Map (Map)
 import           Data.Text (Text)
 import           Data.Time.Clock (UTCTime)
-import           Data.Typeable (Typeable, cast)
+import           Data.Typeable (Typeable, TypeRep, cast, typeOf)
 import           MyGIS.Data.Dimension (IsDimension(..), DimIx)
 import           MyGIS.Data.Units (Unit)
 import           MyGIS.Data.GeoReference (GeoReference)
@@ -52,30 +54,38 @@ class ( IsDimension d
   where
     type Src st d u t :: *
 
-    storeId    :: st d u t -> StoreID
+    sId        :: st d u t -> StoreID
     getSource  :: st d u t -> Context -> DimIx d -> Src st d u t
     getSources :: st d u t -> Context -> DimIx d -> DimIx d -> [Src st d u t]
     dimension  :: st d u t -> d
     units      :: st d u t -> Unit u t
     toStore    :: st d u t -> Store
 
-    toStore s = Store (storeId s) s
+    toStore s = Store (sId s) (typeOf s) s
 
     getSources s ctx from to =
         map (getSource s ctx) (enumFromToIx (dimension s) from to)
 
 fromStore :: IsStore st d u t => Store -> Maybe (st d u t)
-fromStore (Store _ s) = cast s
+fromStore (Store _ _ s) = cast s
+
+
+storeId :: Store -> StoreID
+storeId (Store i _ _) = i
+
+storeType :: Store -> TypeRep
+storeType (Store _ t _) = t
 
 
 data Store where
-  Store :: IsStore st d u t => StoreID -> st d u t -> Store
+  Store :: IsStore st d u t => StoreID -> TypeRep -> st d u t -> Store
 
+deriving instance Typeable Store
 deriving instance Show Store
 instance Eq Store where
-  (Store a _) == (Store b _) = a == b
+  (Store a _ _) == (Store b _ _) = a == b
 instance Ord Store where
-  (Store a _) `compare` (Store b _) = a `compare` b
+  (Store a _ _) `compare` (Store b _ _) = a `compare` b
 
 
 newtype Generation a = Generation
@@ -84,7 +94,9 @@ newtype Generation a = Generation
     ( MonadError GenError, MonadState GenState, MonadReader GenEnv
     , Monad, Functor )
 
-data GenError = OtherError String deriving (Show, Eq)
+data GenError = OtherError String
+              | RegistryLookupError String
+  deriving (Show, Eq)
 
 instance Error GenError where
   noMsg  = OtherError "Unspecified generation error"

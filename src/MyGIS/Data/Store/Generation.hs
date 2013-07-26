@@ -4,6 +4,7 @@ module MyGIS.Data.Store.Generation (
   , GenEnv (..)
   , GenState (..)
   , GenError (..)
+  , Registry
 
   , mkEnvironment
 
@@ -17,6 +18,14 @@ module MyGIS.Data.Store.Generation (
   , throwError
   , catchError
 
+  , emptyRegistry
+  , lookupContext
+  , lookupStore
+  , registerContext
+  , registerStore
+  , registerContexts
+  , registerStores
+
   , liftIO
 ) where
 
@@ -29,14 +38,16 @@ import           Data.Time.Clock (UTCTime, getCurrentTime)
 
 import           MyGIS.Data.Store.Types
 
-mkEnvironment :: IO (GenEnv)
-mkEnvironment = do
-  t <- getCurrentTime
+mkEnvironment :: Maybe UTCTime -> Maybe Registry -> IO (GenEnv)
+mkEnvironment t r = do
+  defaultTime <- getCurrentTime
   return GenEnv {
-      currentTime = t
-    , registry = Registry M.empty M.empty
+      currentTime = maybe defaultTime   id t
+    , registry    = maybe emptyRegistry id r
   }
 
+emptyRegistry :: Registry
+emptyRegistry = Registry M.empty M.empty
 runGen :: GenEnv -> GenState -> Generation a -> IO (Either GenError a, GenState)
 runGen e s (Generation g) = runStateT (runErrorT (runReaderT g e)) s
 
@@ -50,11 +61,46 @@ liftIO = Generation . lift . lift . lift
 getTime :: Generation UTCTime
 getTime = asks currentTime
 
-lookupStore :: StoreID -> Generation (Maybe Store)
+lookupStore :: StoreID -> Generation Store
 lookupStore = lookupIn stores
 
-lookupContext :: ContextID -> Generation (Maybe Context)
+registerStore :: Registry -> Store -> Maybe Registry
+registerStore r s
+  | M.member k sr = Nothing
+  | otherwise     = Just r'
+  where
+    k  = storeId s
+    sr = stores r
+    r' = r { stores = M.insert k s sr }
+
+registerStores :: Registry -> [Store] -> Maybe Registry
+registerStores = foldMaybes registerStore
+
+registerContext :: Registry -> Context -> Maybe Registry
+registerContext r c
+  | M.member k cr = Nothing
+  | otherwise     = Just r'
+  where
+    k  = contextId c
+    cr = contexts r
+    r' = r { contexts = M.insert k c cr}
+
+registerContexts :: Registry -> [Context] -> Maybe Registry
+registerContexts = foldMaybes registerContext
+
+foldMaybes :: (b -> a -> Maybe b) -> b -> [a] -> Maybe b
+foldMaybes fun r (a:as) =
+  case fun r a of
+    Nothing -> Nothing
+    Just r' -> foldMaybes fun r' as
+foldMaybes fun r [] = Just r
+
+lookupContext :: ContextID -> Generation Context
 lookupContext = lookupIn contexts
 
-lookupIn :: Ord k => (Registry -> M.Map k v) -> k -> Generation (Maybe v)
-lookupIn f k = asks (M.lookup k . f . registry)
+lookupIn :: (Ord k, Show k) => (Registry -> M.Map k v) -> k -> Generation v
+lookupIn f k = do
+    maybeV <- asks $ M.lookup k . f . registry
+    case maybeV of
+      Nothing -> throwError $ RegistryLookupError $ show k
+      Just v  -> return v
