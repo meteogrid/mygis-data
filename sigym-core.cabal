@@ -4,7 +4,7 @@
 --                   | | | +--- code changes with no API change
 version:             0.1.0.0
 
-name:                mygis-data
+name:                sigym-core
 
 synopsis:            Core data types and functions used by the mygis library
 description:         TODO
@@ -22,25 +22,25 @@ library
     src
 
   exposed-modules:     
-    MyGIS.Data,
-    MyGIS.Data.Database,
-    MyGIS.Data.Error,
-    MyGIS.Data.Store,
-    MyGIS.Data.GeoReference,
-    MyGIS.Data.Dimension,
-    MyGIS.Data.SpatialReference,
-    MyGIS.Data.Time,
-    MyGIS.Data.Units,
-    MyGIS.Data.IO
+    SIGyM,
+    SIGyM.Database,
+    SIGyM.Error,
+    SIGyM.Store,
+    SIGyM.GeoReference,
+    SIGyM.Dimension,
+    SIGyM.SpatialReference,
+    SIGyM.Time,
+    SIGyM.Units,
+    SIGyM.IO
   
   other-modules:       
-    MyGIS.Data.Database.Pool,
-    MyGIS.Data.Store.Raster,
-    MyGIS.Data.Store.Registry,
-    MyGIS.Data.Store.Types,
-    MyGIS.Data.Store.Generation,
-    MyGIS.Data.ThirdPartyInstances,
-    MyGIS.Data.IO.Raster
+    SIGyM.Database.Pool,
+    SIGyM.Store.Raster,
+    SIGyM.Store.Registry,
+    SIGyM.Store.Types,
+    SIGyM.Store.Generation,
+    SIGyM.ThirdPartyInstances,
+    SIGyM.IO.Raster
   
   -- Other library packages from which modules are imported.
   build-depends:
@@ -87,7 +87,7 @@ test-suite Main
                    temporary,
                    time,
                    vector,
-                   mygis-data
+                   sigym-core
   ghc-options:     -Wall -rtsopts
   hs-source-dirs:  tests
   main-is:         Main.hs
@@ -100,5 +100,5 @@ benchmark RasterIO
                     criterion,
                     temporary,
                     filepath,
-                    mygis-data
+                    sigym-core
   ghc-options:      -Wall -fwarn-tabs -funbox-strict-fields -O2

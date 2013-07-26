@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module MyGIS.Data.ThirdPartyInstances where
+module SIGyM.ThirdPartyInstances where
 
 import           Data.Data
 import           System.Cron

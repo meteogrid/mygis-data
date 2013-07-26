@@ -14,7 +14,7 @@ import Test.Framework.TH
 import Test.QuickCheck
 import Test.Framework.Providers.QuickCheck2
 
-import MyGIS.Data.Units as U
+import SIGyM.Units as U
 
 
 tests :: Test.Framework.Test

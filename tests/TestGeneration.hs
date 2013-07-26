@@ -10,9 +10,9 @@ import Test.Framework.Providers.HUnit
 import Test.HUnit
 
 import Data.Maybe (isJust)
-import MyGIS.Data.Units
-import MyGIS.Data.Store
-import MyGIS.Data.Dimension
+import SIGyM.Units
+import SIGyM.Store
+import SIGyM.Dimension
 
 
 tests :: Test.Framework.Test

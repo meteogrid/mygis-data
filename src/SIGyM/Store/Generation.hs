@@ -1,5 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module MyGIS.Data.Store.Generation (
+module SIGyM.Store.Generation (
     Generation
   , GenEnv (..)
   , GenState (..)
@@ -29,8 +29,8 @@ import           Control.Monad.State hiding (liftIO)
 import           Control.Monad.Error hiding (liftIO)
 import           Data.Time.Clock (UTCTime, getCurrentTime)
 
-import           MyGIS.Data.Store.Registry
-import           MyGIS.Data.Store.Types
+import           SIGyM.Store.Registry
+import           SIGyM.Store.Types
 
 mkEnvironment :: Maybe UTCTime -> Maybe Registry -> IO (GenEnv)
 mkEnvironment t r = do

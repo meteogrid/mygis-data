@@ -21,8 +21,8 @@ import Test.Framework.TH
 import Test.Framework.Providers.HUnit
 import Test.HUnit
 
-import MyGIS.Data
-import MyGIS.Data.IO
+import SIGyM
+import SIGyM.IO
 
 
 tests :: Test.Framework.Test

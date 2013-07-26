@@ -1,4 +1,4 @@
-module MyGIS.Data.Error (
+module SIGyM.Error (
     EitherError
   , mapE
   , mkError

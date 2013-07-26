@@ -8,7 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module MyGIS.Data.Units (
+module SIGyM.Units (
     module Numeric.Units.Dimensional.TF
   , module Numeric.Units.Dimensional.TF.Quantities
   , module Numeric.Units.Dimensional.TF.SIUnits

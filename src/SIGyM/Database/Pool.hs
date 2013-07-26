@@ -1,4 +1,4 @@
-module MyGIS.Data.Database.Pool (
+module SIGyM.Database.Pool (
     PGConnectionPool
   , ConnectionOptions
 

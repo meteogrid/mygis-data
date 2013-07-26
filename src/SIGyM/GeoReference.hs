@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
-module MyGIS.Data.GeoReference (
+module SIGyM.GeoReference (
     GeoReference
   , Pixel (..)
   , Point (..)
@@ -38,8 +38,8 @@ import           Data.Typeable (Typeable)
 import           Data.Monoid (Monoid(..))
 import           Data.Binary (Binary(..))
 
-import           MyGIS.Data.SpatialReference (SpatialReference)
-import           MyGIS.Data.Error (mkError, EitherError)
+import           SIGyM.SpatialReference (SpatialReference)
+import           SIGyM.Error (mkError, EitherError)
 
 
 data GeoReference = GeoReference {    

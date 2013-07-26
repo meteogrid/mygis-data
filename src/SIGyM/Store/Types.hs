@@ -6,7 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 
-module MyGIS.Data.Store.Types (
+module SIGyM.Store.Types (
     IsStore (..)
   , Store (..)
   , Context (..)
@@ -33,9 +33,9 @@ import           Data.HashMap (Map)
 import           Data.Text (Text)
 import           Data.Time.Clock (UTCTime)
 import           Data.Typeable (Typeable, TypeRep, cast, typeOf)
-import           MyGIS.Data.Dimension (IsDimension(..), DimIx)
-import           MyGIS.Data.Units (Unit)
-import           MyGIS.Data.GeoReference (GeoReference)
+import           SIGyM.Dimension (IsDimension(..), DimIx)
+import           SIGyM.Units (Unit)
+import           SIGyM.GeoReference (GeoReference)
 
 
 data Context = Context

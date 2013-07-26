@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
-module MyGIS.Data.Dimension (
+module SIGyM.Dimension (
     IsDimension (..)
   , NullDimension (..)
   , ObservationTimeDimension (..) 
@@ -15,10 +15,9 @@ module MyGIS.Data.Dimension (
 ) where
 
 import           Data.Typeable (Typeable)
-import           Data.Text hiding (map)
 
-import MyGIS.Data.Time
-import MyGIS.Data.ThirdPartyInstances()
+import SIGyM.Time
+import SIGyM.ThirdPartyInstances()
 
 
 class ( Show d, Typeable d, Eq d

@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module MyGIS.Data.Time (
+module SIGyM.Time (
     Time
   , Horizon
   , CronSchedule
@@ -23,7 +23,7 @@ import           System.Cron (CronSchedule)
 import           System.Cron.Parser (cronSchedule)
 import           System.Locale (defaultTimeLocale)
 import qualified Data.Time.Format as T
-import           MyGIS.Data.Error (EitherError, mapE, mkError)
+import           SIGyM.Error (EitherError, mapE, mkError)
 
 newtype Time = Time {toUTCTime :: UTCTime} deriving (Eq, Ord, Typeable)
 

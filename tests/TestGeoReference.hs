@@ -13,7 +13,7 @@ import Test.Framework
 import Test.Framework.TH
 import Test.Framework.Providers.QuickCheck2
 
-import MyGIS.Data.GeoReference
+import SIGyM.GeoReference
 
 
 tests :: Test.Framework.Test

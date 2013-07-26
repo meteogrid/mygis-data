@@ -7,15 +7,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GADTs #-}
 
-module MyGIS.Data.Store.Raster (
+module SIGyM.Store.Raster (
   RasterStore (..)
 ) where
 
 import           Data.Typeable (Typeable)
 --import           Data.Vector.Unboxed as V
-import           MyGIS.Data.Dimension
-import           MyGIS.Data.Units (Unit)
-import           MyGIS.Data.Store.Types
+import           SIGyM.Dimension
+import           SIGyM.Units (Unit)
+import           SIGyM.Store.Types
 
 
 data RasterStore d u t = RasterStore {

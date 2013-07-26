@@ -1,4 +1,4 @@
-module MyGIS.Data.SpatialReference (
+module SIGyM.SpatialReference (
     SpatialReference
   , epsg25830
 ) where

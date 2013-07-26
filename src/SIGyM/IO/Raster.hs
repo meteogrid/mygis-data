@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module MyGIS.Data.IO.Raster
+module SIGyM.IO.Raster
 (
     Raster (..)
   , Options (..)
@@ -39,7 +39,7 @@ import           Data.Vector.Binary()
 import           System.IO
 import           System.IO.Unsafe (unsafePerformIO)
 
-import           MyGIS.Data.GeoReference
+import           SIGyM.GeoReference
 
 data Raster a = Raster {
     options :: Options

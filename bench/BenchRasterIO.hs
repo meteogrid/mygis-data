@@ -6,8 +6,8 @@ import Data.Int
 import System.IO.Temp
 import System.FilePath
 
-import MyGIS.Data
-import MyGIS.Data.IO
+import SIGyM
+import SIGyM.IO
 
 benchConfig :: Config
 benchConfig = defaultConfig {

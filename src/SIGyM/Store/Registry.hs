@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
-module MyGIS.Data.Store.Registry (
+module SIGyM.Store.Registry (
     Registry
 
   , emptyRegistry
@@ -12,7 +12,7 @@ module MyGIS.Data.Store.Registry (
 ) where
 
 import qualified Data.HashMap as M
-import           MyGIS.Data.Store.Types
+import           SIGyM.Store.Types
 
 emptyRegistry :: Registry
 emptyRegistry = Registry M.empty M.empty
