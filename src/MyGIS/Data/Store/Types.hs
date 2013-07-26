@@ -28,7 +28,8 @@ module MyGIS.Data.Store.Types (
 import           Control.Monad.Reader (ReaderT, MonadReader)
 import           Control.Monad.State (StateT, MonadState)
 import           Control.Monad.Error (ErrorT, MonadError, Error(..))
-import           Data.Map (Map)
+import           Data.Hashable (Hashable(..))
+import           Data.HashMap (Map)
 import           Data.Text (Text)
 import           Data.Time.Clock (UTCTime)
 import           Data.Typeable (Typeable, TypeRep, cast, typeOf)
@@ -36,7 +37,6 @@ import           MyGIS.Data.Dimension (IsDimension(..), DimIx)
 import           MyGIS.Data.Units (Unit)
 import           MyGIS.Data.GeoReference (GeoReference)
 
-type ContextID = Text
 
 data Context = Context
   { contextId        :: ContextID
@@ -44,7 +44,8 @@ data Context = Context
 } deriving (Eq, Show, Typeable)
 
 
-newtype StoreID = StoreID Text deriving (Eq,Ord,Show,Typeable)
+newtype ContextID = ContextID Text deriving (Eq,Ord,Show,Typeable,Hashable)
+newtype StoreID = StoreID Text deriving (Eq,Ord,Show,Typeable,Hashable)
 
 class ( IsDimension d
       , Eq (st d u t)
@@ -80,12 +81,17 @@ storeType (Store _ t _) = t
 data Store where
   Store :: IsStore st d u t => StoreID -> TypeRep -> st d u t -> Store
 
-deriving instance Typeable Store
 deriving instance Show Store
+deriving instance Typeable Store
+instance Hashable Store where
+  hashWithSalt s (Store a _ _) = hashWithSalt s a
+  {-# INLINE hashWithSalt #-}
 instance Eq Store where
   (Store a _ _) == (Store b _ _) = a == b
+  {-# INLINE (==) #-}
 instance Ord Store where
   (Store a _ _) `compare` (Store b _ _) = a `compare` b
+  {-# INLINE compare #-}
 
 
 newtype Generation a = Generation

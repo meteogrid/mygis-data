@@ -41,17 +41,17 @@ dummyStore = toStore $ RasterStore dim u sid
         dim = NullDimension
         u   = meter :: Unit DLength Double
 
-case_lookupStore_succeeds_on_registered_store :: IO ()
-case_lookupStore_succeeds_on_registered_store = do
+case_findStore_succeeds_on_registered_store :: IO ()
+case_findStore_succeeds_on_registered_store = do
   let reg = registerStore emptyRegistry dummyStore
   assertBool "Unexpected error when registering store" (isJust reg)
   env <- mkEnvironment Nothing reg
-  s <- evalGen env GenState (lookupStore (storeId dummyStore))
-  assertEqual "could not lookupStore" (Right dummyStore) s
+  s <- evalGen env GenState (findStore (storeId dummyStore))
+  assertEqual "could not findStore" (Right dummyStore) s
     
-case_lookupStore_fails_on_unregistered_store :: IO ()
-case_lookupStore_fails_on_unregistered_store = do
-  s <- evalGen' $ lookupStore $ StoreID "foo"
+case_findStore_fails_on_unregistered_store :: IO ()
+case_findStore_fails_on_unregistered_store = do
+  s <- evalGen' $ findStore $ StoreID "foo"
   case s of
     Left (RegistryLookupError _) -> return ()
     Right _                      -> assertFailure "unexpected Right as result"
