@@ -89,7 +89,8 @@ instance IsID StoreID where
 isValidId :: String -> Bool
 isValidId s =  all isValidChar s
             && head s `notElem` validNonAlphanum
-            && length s < 128
+            && length s < 255
+            && length s > 0
   where isValidChar c =  all (\f -> f c) [isAlphaNum, isAscii]
                       || c `elem` validNonAlphanum
         validNonAlphanum = "-_."

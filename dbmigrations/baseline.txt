@@ -1,0 +1,108 @@
+Description: Baseline database schema
+Created: 2013-07-27 09:19:42.70068 UTC
+Depends: 
+Apply: |
+
+  --
+  -- context
+  -- 
+  CREATE TABLE context (
+      id        CHARACTER VARYING (255) PRIMARY KEY
+                                        CONSTRAINT context_id_length
+                                          CHECK (char_length(id) > 0)
+    , minx      DOUBLE PRECISION        NOT NULL
+    , miny      DOUBLE PRECISION        NOT NULL
+    , maxx      DOUBLE PRECISION        NOT NULL
+    , maxy      DOUBLE PRECISION        NOT NULL
+    , nx        INTEGER                 NOT NULL
+                                        CONSTRAINT context_natural_nx
+                                          CHECK (nx > 1)
+    , ny        INTEGER                 NOT NULL
+                                       CONSTRAINT context_natural_ny
+                                          CHECK (ny > 1)
+    , srid      INTEGER                 NOT NULL
+                                        REFERENCES spatial_ref_sys (srid)
+    , CONSTRAINT context_valid_boxx CHECK (minx < maxx)
+    , CONSTRAINT context_valid_boxy CHECK (miny < maxy)
+    );
+
+  CREATE FUNCTION context_change_notify () RETURNS trigger AS
+  $BODY$
+      BEGIN
+          NOTIFY context_change;
+          RETURN NULL;
+      END; 
+  $BODY$
+    LANGUAGE plpgsql;
+
+  CREATE TRIGGER context_change_trigger
+    AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE
+    ON context FOR EACH STATEMENT
+    EXECUTE PROCEDURE context_change_notify ();
+
+
+  
+  --
+  -- store
+  -- 
+
+  CREATE TABLE store (
+      id       CHARACTER VARYING (255) PRIMARY KEY
+                                       CONSTRAINT store_id_length
+                                         CHECK (char_length(id) > 0)
+    , path     TEXT                    NOT NULL
+    , module   CHARACTER VARYING (255) NOT NULL
+    , name     CHARACTER VARYING (255) NOT NULL
+    );
+
+  CREATE FUNCTION store_change_notify () RETURNS trigger AS
+  $BODY$
+      BEGIN
+          NOTIFY store_change;
+          RETURN NULL;
+      END; 
+  $BODY$
+    LANGUAGE plpgsql;
+
+  CREATE TRIGGER store_change_trigger
+    AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE
+    ON store FOR EACH STATEMENT
+    EXECUTE PROCEDURE store_change_notify ();
+  
+
+  --
+  -- store_context
+  -- 
+
+  CREATE TABLE store_context (
+      store_id   CHARACTER VARYING (255) NOT NULL
+                                         REFERENCES store (id)
+    , context_id CHARACTER VARYING (255) NOT NULL
+                                         REFERENCES context (id)
+    , PRIMARY KEY (store_id, context_id)
+    );
+
+  CREATE FUNCTION store_context_change_notify () RETURNS trigger AS
+  $BODY$
+      BEGIN
+          NOTIFY store_context_change;
+          RETURN NULL;
+      END; 
+  $BODY$
+    LANGUAGE plpgsql;
+
+  CREATE TRIGGER store_context_change_trigger
+    AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE
+    ON store_context FOR EACH STATEMENT
+    EXECUTE PROCEDURE store_context_change_notify ();
+
+
+Revert: |
+  DROP TABLE store_context;
+  DROP FUNCTION store_context_change_notify ();
+
+  DROP TABLE store;
+  DROP FUNCTION store_change_notify ();
+
+  DROP TABLE context;
+  DROP FUNCTION context_change_notify ();
