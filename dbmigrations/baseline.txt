@@ -6,22 +6,19 @@ Apply: |
   --
   -- context
   -- 
+
   CREATE TABLE context (
-      id        CHARACTER VARYING (255) PRIMARY KEY
-                                        CONSTRAINT context_id_length
-                                          CHECK (char_length(id) > 0)
+      id        SERIAL                  PRIMARY KEY
+    , contextId CHARACTER VARYING (255) NOT NULL UNIQUE
+                                          CHECK (char_length(contextId) > 0)
     , minx      DOUBLE PRECISION        NOT NULL
     , miny      DOUBLE PRECISION        NOT NULL
     , maxx      DOUBLE PRECISION        NOT NULL
     , maxy      DOUBLE PRECISION        NOT NULL
-    , nx        INTEGER                 NOT NULL
-                                        CONSTRAINT context_natural_nx
-                                          CHECK (nx > 1)
-    , ny        INTEGER                 NOT NULL
-                                       CONSTRAINT context_natural_ny
-                                          CHECK (ny > 1)
+    , nx        INTEGER                 NOT NULL CHECK (nx > 1)
+    , ny        INTEGER                 NOT NULL CHECK (ny > 1)
     , srid      INTEGER                 NOT NULL
-                                        REFERENCES spatial_ref_sys (srid)
+                                          REFERENCES spatial_ref_sys (srid)
     , CONSTRAINT context_valid_boxx CHECK (minx < maxx)
     , CONSTRAINT context_valid_boxy CHECK (miny < maxy)
     );
@@ -47,12 +44,13 @@ Apply: |
   -- 
 
   CREATE TABLE store (
-      id       CHARACTER VARYING (255) PRIMARY KEY
-                                       CONSTRAINT store_id_length
-                                         CHECK (char_length(id) > 0)
-    , path     TEXT                    NOT NULL
-    , module   CHARACTER VARYING (255) NOT NULL
-    , name     CHARACTER VARYING (255) NOT NULL
+      id      SERIAL                  PRIMARY KEY
+    , storeId CHARACTER VARYING (255) NOT NULL UNIQUE
+                                        CHECK (char_length(storeId) > 0)
+    , version INTEGER                 NOT NULL
+    , type    CHARACTER (10)          NOT NULL
+                                        CONSTRAINT check_store_type
+                                        CHECK (type IN ('fs', 'db'))
     );
 
   CREATE FUNCTION store_change_notify () RETURNS trigger AS
@@ -64,45 +62,70 @@ Apply: |
   $BODY$
     LANGUAGE plpgsql;
 
+  CREATE FUNCTION prune_orphan_stores () RETURNS trigger AS
+  $BODY$
+      BEGIN
+          IF TG_RELNAME='fs_store' THEN
+            DELETE FROM store WHERE id IN (
+              SELECT s.id FROM store s LEFT OUTER JOIN fs_store o
+                ON (o.id = s.id) WHERE o.id IS NULL
+            );
+          ELSE
+            RAISE EXCEPTION 'Unimplemented subtable --> %', TG_RELNAME;
+          END IF;
+          RETURN NULL;
+      END; 
+  $BODY$
+    LANGUAGE plpgsql;
+
+
   CREATE TRIGGER store_change_trigger
     AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE
     ON store FOR EACH STATEMENT
     EXECUTE PROCEDURE store_change_notify ();
   
 
+  CREATE TABLE fs_store (
+      id      INTEGER                 PRIMARY KEY REFERENCES store (id)
+    , path    CHARACTER VARYING (255) NOT NULL
+                                        CHECK (char_length(path) > 0)
+    , module  CHARACTER VARYING (255) NOT NULL
+                                        CHECK (char_length(module) > 0)
+    , symbol  CHARACTER VARYING (255) NOT NULL
+                                        CHECK (char_length(symbol) > 0)
+    , UNIQUE (path, module, symbol)
+    );
+
+  CREATE TRIGGER fs_store_update_trigger
+    AFTER INSERT OR UPDATE
+    ON fs_store FOR EACH STATEMENT
+    EXECUTE PROCEDURE store_change_notify ();
+
+  CREATE TRIGGER fs_store_delete_trigger
+    AFTER DELETE OR TRUNCATE
+    ON fs_store FOR EACH STATEMENT
+    EXECUTE PROCEDURE prune_orphan_stores ();
+
+
   --
   -- store_context
   -- 
 
   CREATE TABLE store_context (
-      store_id   CHARACTER VARYING (255) NOT NULL
-                                         REFERENCES store (id)
-    , context_id CHARACTER VARYING (255) NOT NULL
-                                         REFERENCES context (id)
+      store_id   INTEGER NOT NULL REFERENCES store (id)
+    , context_id INTEGER NOT NULL REFERENCES context (id)
+    , auto       BOOLEAN NOT NULL DEFAULT FALSE
     , PRIMARY KEY (store_id, context_id)
     );
-
-  CREATE FUNCTION store_context_change_notify () RETURNS trigger AS
-  $BODY$
-      BEGIN
-          NOTIFY store_context_change;
-          RETURN NULL;
-      END; 
-  $BODY$
-    LANGUAGE plpgsql;
-
-  CREATE TRIGGER store_context_change_trigger
-    AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE
-    ON store_context FOR EACH STATEMENT
-    EXECUTE PROCEDURE store_context_change_notify ();
 
 
 Revert: |
   DROP TABLE store_context;
-  DROP FUNCTION store_context_change_notify ();
 
+  DROP TABLE fs_store;
   DROP TABLE store;
   DROP FUNCTION store_change_notify ();
+  DROP FUNCTION prune_orphan_stores ();
 
   DROP TABLE context;
   DROP FUNCTION context_change_notify ();
