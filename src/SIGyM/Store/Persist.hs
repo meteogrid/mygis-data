@@ -4,18 +4,24 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 module SIGyM.Store.Persist (
-    queryAllStores
+    StoreLoadEnv
+  , queryAllStores
   , foldAllStores
 ) where
 
 import           Control.Applicative ((<$>), (<*>))
-import           Control.Monad (liftM)
 import           Data.Text (Text)
-import           Database.PostgreSQL.Simple ( Connection, Query, fold, query )
+import           Data.Maybe (fromJust)
+import           Data.ByteString as BS (ByteString, concat)
+import           Data.ByteString.Char8 (pack)
+import           Database.PostgreSQL.Simple ( Connection, Query, fold )
 import           Database.PostgreSQL.Simple.FromRow(FromRow (..), field)
+import           System.FilePath (joinPath)
 
 import           SIGyM.Store.Types
 import           SIGyM.Database (sql)
+import           SIGyM.DynLoad ( EvalEnv(..), EitherSymbol, loadSymbolFromModule
+                               , loadSymbolFromBuffer )
 
 allStores :: Query
 allStores =  [sql|
@@ -23,7 +29,7 @@ allStores =  [sql|
   FROM all_stores
 |]
 
-data LoadEnv = LoadEnv {
+data StoreLoadEnv = StoreLoadEnv {
     basePath :: FilePath
  ,  libdir   :: FilePath
 } deriving (Eq, Show)
@@ -33,26 +39,52 @@ data StoreRow = StoreRow {
   , rowId       :: !Int
   , rowStoreId  :: !Text
   , rowMD5      :: !Text
-  , rowFsPath   :: !(Maybe Text)
-  , rowFsModule :: !(Maybe Text)
-  , rowFsSymbol :: !(Maybe Text)
-  , rowDbCode   :: !(Maybe Text)
+  , rowFsPath   :: !(Maybe String)
+  , rowFsModule :: !(Maybe String)
+  , rowFsSymbol :: !(Maybe String)
+  , rowDbCode   :: !(Maybe ByteString)
   } 
+
+data StoreRowType = FSStore | DBStore deriving (Eq, Show)
 
 instance FromRow StoreRow where
   fromRow = StoreRow <$> field <*> field <*> field <*> field
                      <*> field <*> field <*> field <*> field
 
 
+foldAllStores :: StoreLoadEnv -> Connection -> a -> (a -> Store -> IO a) -> IO a
+foldAllStores env conn acc fun = fold conn allStores () acc fun'
+  where fun' a r = do
+           s' <- rowToStore env r
+           case s' of
+             Right s -> fun a s
+             _       -> return a
 
-foldAllStores :: Connection -> a -> (a -> Store -> IO a) -> IO a
-foldAllStores conn acc fun = fold conn allStores () acc fun'
-  where fun' a = fun a . rowToStore
+queryAllStores :: StoreLoadEnv -> Connection -> IO [Store]
+queryAllStores env conn = foldAllStores env conn [] buildList
+  where buildList a s = a `seq` return (s:a)
 
-queryAllStores :: Connection -> IO [Store]
-queryAllStores conn = liftM (map rowToStore) $ query conn allStores ()
 
-rowToStore :: StoreRow -> Store
-rowToStore s@StoreRow{..} =
+rowToStore :: StoreLoadEnv -> StoreRow -> IO (EitherSymbol Store)
+rowToStore env s@StoreRow{..} =
   case rowType of
-    "fs" -> undefined
+    "fs" -> loadFSStore env s
+    "db" -> loadDBStore env s
+    _    -> return $ Left "Unexpected 'type' field in database row"
+
+loadDBStore :: StoreLoadEnv -> StoreRow -> IO (EitherSymbol Store)
+loadDBStore StoreLoadEnv{..} StoreRow{..} =
+    loadSymbolFromBuffer env modname "store" buffer
+  where env      = EvalEnv libdir []
+        modname  = "DatabaseModule" ++ show rowId
+        buffer   = BS.concat ["module ", pack modname, "(store) where\n", code]
+        code     = fromJust rowDbCode
+
+
+loadFSStore :: StoreLoadEnv -> StoreRow -> IO (EitherSymbol Store)
+loadFSStore StoreLoadEnv{..} StoreRow{..} =
+    loadSymbolFromModule env modname symbol
+  where iPath   = joinPath [basePath, (fromJust rowFsPath)]
+        env     = EvalEnv libdir [iPath]
+        modname = fromJust rowFsModule
+        symbol  = fromJust rowFsSymbol

@@ -5,24 +5,34 @@ module SIGyM.DynLoad (
     EvalEnv (..)
   , EitherSymbol
   , defaultEnv
-  , loadSymbol
+  , loadSymbolFromModule
+  , loadSymbolFromBuffer
 ) where
 
 import           Blaze.ByteString.Builder ( Builder, toByteString
                                           , fromByteString)
 import           Control.Exception (Handler(Handler), catches)
-import           Data.Dynamic ( fromDynamic, Typeable, dynTypeRep )
 import           Data.ByteString as BS (ByteString, length)
+import           Data.ByteString.Internal (toForeignPtr)
 import           Data.ByteString.Char8 (pack)
+import           Data.Dynamic ( fromDynamic, Typeable, dynTypeRep )
 import           Data.IORef (IORef, newIORef, readIORef, modifyIORef')
+import           Data.Maybe (fromJust)
 import           Data.Monoid (mempty, mappend)
+import           Data.Time.Clock (UTCTime(UTCTime))
+import           Data.Time.Calendar (Day(ModifiedJulianDay))
 
-import           GHC
+import           System.FilePath (joinPath)
+import           System.IO (withFile, hFlush, IOMode(..))
+import           System.IO.Temp (withSystemTempDirectory)
+
+import           GHC hiding (importPaths)
 import qualified GHC.Paths as P
 import           ErrUtils
 import           HscTypes
 import           Outputable
-import           DynFlags
+import qualified DynFlags
+import           StringBuffer
 
 
 type EitherSymbol = Either ByteString
@@ -36,15 +46,40 @@ data EvalEnv = EvalEnv {
 defaultEnv :: EvalEnv
 defaultEnv = EvalEnv { libdir = P.libdir, importPaths = ["."] }
 
-
-loadSymbol ::
+loadSymbolFromModule ::
     Typeable a =>
     EvalEnv ->
     String ->
     String ->
     IO (EitherSymbol a)
+loadSymbolFromModule = loadSymbol Nothing
 
-loadSymbol env modname symbol = do
+loadSymbolFromBuffer ::
+    Typeable a =>
+    EvalEnv ->
+    String ->
+    String ->
+    ByteString ->
+    IO (EitherSymbol a)
+loadSymbolFromBuffer env modname symbol code =
+  withSystemTempDirectory "sigym.dynload." $ \tmpDir -> do
+    -- create dummy file since GHC will try to open it even though we pass
+    -- a buffer
+    withFile (joinPath [tmpDir, modname ++ ".hs"]) WriteMode hFlush
+    let env' = env { importPaths = [tmpDir] ++ importPaths env}
+    loadSymbol (Just code) env' modname symbol
+
+
+
+loadSymbol ::
+    Typeable a =>
+    Maybe ByteString ->
+    EvalEnv ->
+    String ->
+    String ->
+    IO (EitherSymbol a)
+
+loadSymbol code env modname symbol = do
   logRef <- newIORef mempty :: (IO (IORef Builder))
   let compileAndLoad = do
         dflags <- getSessionDynFlags
@@ -54,12 +89,13 @@ loadSymbol env modname symbol = do
               , ghcLink = LinkInMemory
               , outputHi = Nothing
               , outputFile = Nothing
-              , DynFlags.importPaths = SIGyM.DynLoad.importPaths env
+              , DynFlags.importPaths = importPaths env
               , log_action = logHandler logRef
+              , verbosity  = 3
               }
-        _ <- setSessionDynFlags (updOptLevel 2 dflags')
+        _ <- setSessionDynFlags (DynFlags.updOptLevel 2 dflags')
         defaultCleanupHandler dflags' $ do
-          target <- guessTarget modname Nothing
+          target <- getTarget modname code
           setTargets [target]
           _ <- load LoadAllTargets
           import_modules [modname]
@@ -80,6 +116,20 @@ loadSymbol env modname symbol = do
       , Handler (\(e :: GhcApiError) -> handler (show e))
     ]
 
+getTarget :: Monad m => [Char] -> Maybe ByteString -> m Target
+getTarget modname code = return target
+  where target  =
+          Target { targetId           = TargetModule $ mkModuleName modname
+                 , targetAllowObjCode = True
+                 , targetContents     = contents }
+        sBuff      = StringBuffer p l o
+        (p,o,l)    = toForeignPtr (fromJust code)
+        contents   = case code of
+                       Nothing -> Nothing
+                       Just _  -> Just (sBuff, dummyTime)
+        dummyTime  = UTCTime (ModifiedJulianDay 0) (fromRational 0)
+
+
 
 import_modules:: [String] -> Ghc ()
 import_modules mods =
@@ -90,7 +140,7 @@ import_modules mods =
             {GHC.ideclQualified=False}
 
 -- from http://parenz.wordpress.com/2013/07/23/on-custom-error-handlers-for-ghc-api/
-logHandler :: IORef Builder -> LogAction
+logHandler :: IORef Builder -> DynFlags.LogAction
 logHandler ref dflags severity srcSpan style msg =
   case severity of
      SevError ->  modifyIORef' ref (mappend printDoc)

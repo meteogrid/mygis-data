@@ -13,9 +13,7 @@ module SIGyM.Time (
 ) where
 
 import           Data.Typeable (Typeable)
-import           Data.Time.Calendar ( Day(ModifiedJulianDay) )
-import           Data.Time.Clock ( UTCTime(UTCTime), secondsToDiffTime,
-                                  addUTCTime, diffUTCTime, NominalDiffTime )
+import           Data.Time.Clock (UTCTime, addUTCTime, NominalDiffTime )
 import           Data.Text (Text)
 import           Data.Attoparsec.Text (parseOnly)
 import           Data.List (nub, sort)
@@ -50,10 +48,7 @@ minutesToNominalDiffTime :: Integer -> NominalDiffTime
 minutesToNominalDiffTime = secondsToNominalDiffTime . (*60)
 
 secondsToNominalDiffTime :: Integer -> NominalDiffTime
-secondsToNominalDiffTime s | s >= 0    = diffUTCTime b a
-                           | otherwise = diffUTCTime a b
-  where a = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
-        b = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime $ abs s)
+secondsToNominalDiffTime = fromRational . fromIntegral
 
 
 

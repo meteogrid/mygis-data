@@ -27,10 +27,10 @@ case_can_load_double =
       withFile (joinPath [tmpDir, "Plugin.hs"]) WriteMode $ \f ->
         hPutStrLn f "module Plugin where sym = 2 :: Double"
 
-      sym <- loadSymbol (defaultEnv { importPaths=[tmpDir] }) "Plugin" "sym"
+      sym <- loadSymbolFromModule (defaultEnv { importPaths=[tmpDir] }) "Plugin" "sym"
       assertIsRight sym
       let Right num = sym
-      assertEqual "loaded value is not corect" num (2 :: Double)
+      assertEqual "loaded value is not correct" num (2 :: Double)
 
 case_can_load_func :: IO ()
 case_can_load_func =
@@ -39,11 +39,26 @@ case_can_load_func =
         hPutStrLn f
           "module Plugin where\nadd2 :: Double -> Double\nadd2 a = a+2"
 
-      sym <- loadSymbol (defaultEnv { importPaths=[tmpDir] }) "Plugin" "add2"
+      sym <- loadSymbolFromModule (defaultEnv { importPaths=[tmpDir] }) "Plugin" "add2"
       assertIsRight sym
       let Right fun = sym
           v = fun (4 :: Double)
-      assertEqual "computed value is not corect" v (6 :: Double)
+      assertEqual "computed value is not correct" v (6 :: Double)
+
+case_can_load_func_from_buffer :: IO ()
+case_can_load_func_from_buffer = do
+      sym <- loadSymbolFromBuffer defaultEnv "Plugin" "add2"
+               "module Plugin where\nadd2 :: Double -> Double\nadd2 a = a+2"
+      sym2 <- loadSymbolFromBuffer defaultEnv "Plugin" "add2"
+               "module Plugin where\nadd2 :: Double -> Double\nadd2 a = a+3"
+      assertIsRight sym
+      assertIsRight sym2
+      let Right fun  = sym
+          Right fun2 = sym2
+          v  = fun (4 :: Double)
+          v2 = fun2 (4 :: Double)
+      assertEqual "computed value v is not correct" v (6 :: Double)
+      assertEqual "computed value v2 is not correct" v2 (7 :: Double)
 
 case_import_sibling_modules :: IO ()
 case_import_sibling_modules =
@@ -58,11 +73,11 @@ case_import_sibling_modules =
       withFile (joinPath [tmpDir, "Plugin.hs"]) WriteMode $ \f ->
         hPutStrLn f code
 
-      sym <- loadSymbol (defaultEnv { importPaths=[tmpDir] }) "Plugin" "fun"
+      sym <- loadSymbolFromModule (defaultEnv { importPaths=[tmpDir] }) "Plugin" "fun"
       assertIsRight sym
       let Right fun = sym
           v = fun (4 :: Double)
-      assertEqual "computed value is not corect" v (6 :: Double)
+      assertEqual "computed value is not correct" v (6 :: Double)
 
 case_compile_error_yields_Left_value :: IO ()
 case_compile_error_yields_Left_value =
@@ -70,7 +85,7 @@ case_compile_error_yields_Left_value =
       withFile (joinPath [tmpDir, "Plugin.hs"]) WriteMode $ \f ->
         hPutStrLn f "module Plugin where foo = \"2\" :: Double"
 
-      sym <- loadSymbol (defaultEnv { importPaths=[tmpDir] }) "Plugin" "foo" ::
+      sym <- loadSymbolFromModule (defaultEnv { importPaths=[tmpDir] }) "Plugin" "foo" ::
                 IO (EitherSymbol Double)
       case sym of
         Right _  -> assertFailure "unexpected right value"
@@ -90,7 +105,7 @@ case_safe_haskell_is_enforced =
 
       withFile (joinPath [tmpDir, "Plugin.hs"]) WriteMode $ \f ->
         hPutStrLn f code
-      sym <- loadSymbol (defaultEnv { importPaths=[tmpDir] })
+      sym <- loadSymbolFromModule (defaultEnv { importPaths=[tmpDir] })
                         "Plugin" "fun" :: IO (EitherSymbol (Double -> Double))
       case sym of
         Right _  -> assertFailure "unexpected right value"
