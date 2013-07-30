@@ -4,6 +4,7 @@ import qualified TestGeoReference
 import qualified TestRasterIO
 import qualified TestUnits
 import qualified TestGeneration
+import qualified TestDynLoad
 
 
 main :: IO ()
@@ -12,4 +13,5 @@ main = defaultMain [
   , TestRasterIO.tests
   , TestUnits.tests
   , TestGeneration.tests
+  , TestDynLoad.tests
   ]

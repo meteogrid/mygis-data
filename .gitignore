@@ -1,6 +1,8 @@
 *.hi
 *.ll
 *.o
+*.p_o
+*.dyn_o
 .fuse_hidden*
 *.swp
 dist

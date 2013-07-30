@@ -100,7 +100,8 @@ Apply: |
 
           -- Check no other siblings with same id
           IF FOUND AND cur.type != type THEN
-            RAISE EXCEPTION 'Duplicated id % of type "%" or invalid type on store table', NEW.id, trim(trailing ' ' from cur.type);
+            RAISE EXCEPTION 'Duplicated id % of type "%" or invalid type on '
+                'store table', NEW.id, trim(trailing ' ' from cur.type);
           END IF;
 
           RETURN NEW;
@@ -141,8 +142,8 @@ Apply: |
   CREATE FUNCTION prune_orphan_stores_tg () RETURNS trigger AS
   $BODY$
       BEGIN
-      PERFORM prune_orphan_stores(TG_TABLE_NAME::regclass);
-      RETURN NULL;
+        PERFORM prune_orphan_stores(TG_TABLE_NAME::regclass);
+        RETURN NULL;
       END;
   $BODY$
     LANGUAGE plpgsql;
