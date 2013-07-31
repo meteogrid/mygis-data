@@ -1,6 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
 module SIGyM.DynLoad (
     EvalEnv (..)
   , EitherSymbol
@@ -31,7 +30,7 @@ import qualified GHC.Paths as P
 import           ErrUtils
 import           HscTypes
 import           Outputable
-import qualified DynFlags
+import qualified DynFlags as DF
 import           StringBuffer
 
 
@@ -89,11 +88,14 @@ loadSymbol code env modname symbol = do
               , ghcLink = LinkInMemory
               , outputHi = Nothing
               , outputFile = Nothing
-              , DynFlags.importPaths = importPaths env
+              , DF.importPaths = importPaths env
               , log_action = logHandler logRef
+              -- , packageFlags = [ DF.TrustPackage "sigym-core"
+              --               , DF.TrustPackage "vector"
+              --               ]
               , verbosity  = 3
               }
-        _ <- setSessionDynFlags (DynFlags.updOptLevel 2 dflags')
+        _ <- setSessionDynFlags (DF.updOptLevel 2 dflags')
         defaultCleanupHandler dflags' $ do
           target <- getTarget modname code
           setTargets [target]
@@ -109,14 +111,14 @@ loadSymbol code env modname symbol = do
       handler e = do
         msg <- readIORef logRef
         let bsMsg = toByteString msg
-        return $ Left (if BS.length bsMsg > 0 then bsMsg else (pack e))
+        return $ Left (if BS.length bsMsg > 0 then bsMsg else pack e)
 
   (runGhc (Just (libdir env)) compileAndLoad) `catches` [
         Handler (\(e :: SourceError) -> handler (show e))
       , Handler (\(e :: GhcApiError) -> handler (show e))
     ]
 
-getTarget :: Monad m => [Char] -> Maybe ByteString -> m Target
+getTarget :: Monad m => String -> Maybe ByteString -> m Target
 getTarget modname code = return target
   where target  =
           Target { targetId           = TargetModule $ mkModuleName modname
@@ -140,7 +142,7 @@ import_modules mods =
             {GHC.ideclQualified=False}
 
 -- from http://parenz.wordpress.com/2013/07/23/on-custom-error-handlers-for-ghc-api/
-logHandler :: IORef Builder -> DynFlags.LogAction
+logHandler :: IORef Builder -> DF.LogAction
 logHandler ref dflags severity srcSpan style msg =
   case severity of
      SevError ->  modifyIORef' ref (mappend printDoc)

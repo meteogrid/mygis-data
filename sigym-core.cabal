@@ -82,6 +82,7 @@ test-suite Main
                    base,
                    bytestring,
                    filepath,
+                   ghc-paths,
                    HUnit                            >= 1.2,
                    QuickCheck                       >= 2.4,
                    test-framework                   >= 0.4.1,

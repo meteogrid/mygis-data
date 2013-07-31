@@ -19,20 +19,26 @@ Apply: |
     , ny        INTEGER                 NOT NULL CHECK (ny > 1)
     , srid      INTEGER                 NOT NULL
                                           REFERENCES spatial_ref_sys (srid)
-    , CONSTRAINT context_valid_boxx CHECK (minx < maxx)
-    , CONSTRAINT context_valid_boxy CHECK (miny < maxy)
+    , CONSTRAINT context_valid_box CHECK (minx < maxx AND miny < maxy)
+    );
+  
+  CREATE TYPE store_state AS ENUM ('unparsed', 'ok', 'error');
+  CREATE TYPE store_type AS ENUM ('fs', 'db');
+
+  CREATE TABLE store_error (
+      id       SERIAL                    PRIMARY KEY
+    , ts       TIMESTAMP WITH TIME ZONE  NOT NULL DEFAULT NOW ()
+    , message  TEXT                      NOT NULL
     );
 
   CREATE TABLE store (
-      id      SERIAL                  PRIMARY KEY
-    , storeId CHARACTER VARYING (255) NOT NULL UNIQUE
+      id       SERIAL                  PRIMARY KEY
+    , storeId  CHARACTER VARYING (255) NOT NULL UNIQUE
                                         CHECK (char_length(storeId) > 0)
-    , md5     CHARACTER (40)          NOT NULL
-    , type    CHARACTER (10)          NOT NULL
-                                        CONSTRAINT check_store_type
-                                        CHECK (type IN ('fs', 'db'))
+    , state    store_state             NOT NULL DEFAULT 'unparsed'
+    , error_id INTEGER                 REFERENCES store_error (id)
+    , type     store_type              NOT NULL
     );
-
 
   CREATE TABLE fs_store (
       id      INTEGER                 PRIMARY KEY REFERENCES store (id)
@@ -68,7 +74,8 @@ Apply: |
     SELECT s.type
          , s.id
          , s.storeId
-         , s.md5
+         , s.state
+         , s.error_id
          , fs.path
          , fs.module
          , fs.symbol
@@ -99,9 +106,9 @@ Apply: |
           SELECT * INTO cur FROM all_stores WHERE id=NEW.id;
 
           -- Check no other siblings with same id
-          IF FOUND AND cur.type != type THEN
+          IF FOUND AND (cur.type :: text) != type THEN
             RAISE EXCEPTION 'Duplicated id % of type "%" or invalid type on '
-                'store table', NEW.id, trim(trailing ' ' from cur.type);
+                'store table', NEW.id, (cur.type :: text);
           END IF;
 
           RETURN NEW;
@@ -115,7 +122,11 @@ Apply: |
       DECLARE
           cur store%ROWTYPE;
       BEGIN
-          EXECUTE 'SELECT * FROM store WHERE id = $1' INTO cur USING NEW.id;
+          IF TG_OP IN ('INSERT', 'UPDATE') THEN
+            EXECUTE 'SELECT * FROM store WHERE id = $1' INTO cur USING NEW.id;
+          ELSIF TG_OP IN ('DELETE') THEN
+            EXECUTE 'SELECT * FROM store WHERE id = $1' INTO cur USING OLD.id;
+          END IF;
           PERFORM pg_notify('store_change', cur.storeId);
           RETURN NULL;
       END; 
@@ -132,7 +143,7 @@ Apply: |
           EXECUTE
             'DELETE FROM store WHERE id IN ('
                'SELECT s.id FROM store s LEFT OUTER JOIN ' || tabname || ' o '
-               'ON (o.id = s.id) WHERE o.id IS NULL AND s.type = $1'
+               'ON (o.id = s.id) WHERE o.id IS NULL AND s.type = CAST($1 AS store_type)'
             ')' USING type;
           RETURN;
       END; 
@@ -206,7 +217,11 @@ Revert: |
   DROP TABLE db_store;
   DROP TABLE fs_store;
   DROP TABLE store;
+  DROP TABLE store_error;
   DROP TABLE context;
+
+  DROP TYPE store_state;
+  DROP TYPE store_type;
 
   DROP FUNCTION store_change_notify ();
   DROP FUNCTION prune_orphan_stores (regclass);

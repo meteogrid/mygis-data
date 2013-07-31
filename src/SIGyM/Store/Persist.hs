@@ -38,7 +38,6 @@ data StoreRow = StoreRow {
     rowType     :: !Text
   , rowId       :: !Int
   , rowStoreId  :: !Text
-  , rowMD5      :: !Text
   , rowFsPath   :: !(Maybe String)
   , rowFsModule :: !(Maybe String)
   , rowFsSymbol :: !(Maybe String)
@@ -49,7 +48,7 @@ data StoreRowType = FSStore | DBStore deriving (Eq, Show)
 
 instance FromRow StoreRow where
   fromRow = StoreRow <$> field <*> field <*> field <*> field
-                     <*> field <*> field <*> field <*> field
+                     <*> field <*> field <*> field
 
 
 foldAllStores :: StoreLoadEnv -> Connection -> a -> (a -> Store -> IO a) -> IO a
