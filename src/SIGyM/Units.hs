@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-} 
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverlappingInstances #-}
@@ -13,13 +14,14 @@
 {-# LANGUAGE GADTs #-}
 
 module SIGyM.Units (
-    module Numeric.Units.Dimensional.TF
+  IsUnit (..)
+  , module Numeric.Units.Dimensional.TF
   , module Numeric.Units.Dimensional.TF.Quantities
   , module Numeric.Units.Dimensional.TF.SIUnits
   , module Numeric.Units.Dimensional.TF.NonSI
 ) where
 
-import           Prelude ( Show(..), Eq(..), Num, (++), undefined )
+import           Prelude ( Show(..), Eq(..), Num, Double, (++), undefined)
 import           Data.Vector.Generic.Base (Vector)
 import           Data.Vector.Generic.Mutable (MVector)
 import           Data.Vector.Storable (Storable)
@@ -28,6 +30,18 @@ import           Numeric.Units.Dimensional.TF
 import           Numeric.Units.Dimensional.TF.Quantities
 import           Numeric.Units.Dimensional.TF.SIUnits
 import           Numeric.Units.Dimensional.TF.NonSI
+
+class IsUnit u where
+    type AssocQuantity u :: *
+    (.*.) :: Double -> u -> AssocQuantity u
+    (./.) :: AssocQuantity u -> u -> Double
+infixl 7 .*.
+infixl 7 ./.
+
+instance forall a. IsUnit (Unit a Double) where
+    type AssocQuantity (Unit a Double) = Quantity a Double
+    (.*.) = (*~)
+    (./.) = (/~)
 
 
 deriving instance Vector U.Vector a => (Vector U.Vector) (Quantity d a)
